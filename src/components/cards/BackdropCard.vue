@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import type { MediaServerPlayItem } from '@/api/types'
+import resource from '@/api/resource'
 
 // 输入参数
 const props = defineProps({
@@ -10,6 +11,9 @@ const props = defineProps({
 
 // 图片是否加载完成
 const imageLoaded = ref(false)
+
+// 图片 URL
+const imgUrl = ref<string>('')
 
 // 图片加载完成响应
 function imageLoadHandler() {
@@ -22,9 +26,19 @@ function goPlay() {
 }
 
 // 计算图片地址
-const getImgUrl = computed(() => {
+async function fetchImageUrl(imgRef: Ref<string>) {
   const image = props.media?.image || ''
-  return `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(image)}`
+  if (!image) {
+    imgRef.value = image
+  }
+
+  const token = await resource.getResourceToken()
+  imgRef.value = `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(image)}&token=${token}`
+}
+
+// 异步更新图片 URL
+onMounted(() => {
+  fetchImageUrl(imgUrl)
 })
 </script>
 
@@ -43,7 +57,7 @@ const getImgUrl = computed(() => {
         @click="goPlay"
       >
         <template #image>
-          <VImg :src="getImgUrl" aspect-ratio="2/3" cover @load="imageLoadHandler">
+          <VImg :src="imgUrl" aspect-ratio="2/3" cover @load="imageLoadHandler">
             <template #placeholder>
               <div class="w-full h-full">
                 <VSkeletonLoader class="object-cover aspect-w-3 aspect-h-2" />

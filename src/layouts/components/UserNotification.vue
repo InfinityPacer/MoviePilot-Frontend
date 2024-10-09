@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import store from '@/store'
 import { formatDateDifference } from '@core/utils/formatters'
 import { SystemNotification } from '@/api/types'
+import resource from '@/api/resource'
 
 // 是否有新消息
 const hasNewMessage = ref(false)
@@ -16,8 +16,8 @@ let eventSource: EventSource | null = null
 const appsMenu = ref(false)
 
 // SSE持续接收消息
-function startSSEMessager() {
-  const token = store.state.auth.token
+async function startSSEMessager() {
+  const token = await resource.getResourceToken()
   if (token) {
     eventSource = new EventSource(`${import.meta.env.VITE_API_BASE_URL}system/message?token=${token}`)
     eventSource.addEventListener('message', event => {

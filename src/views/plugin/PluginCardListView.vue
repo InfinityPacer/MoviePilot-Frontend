@@ -2,6 +2,7 @@
 import { useToast } from 'vue-toast-notification'
 import api from '@/api'
 import type { Plugin } from '@/api/types'
+import resource from '@/api/resource'
 import NoDataFound from '@/components/NoDataFound.vue'
 import PluginAppCard from '@/components/cards/PluginAppCard.vue'
 import PluginCard from '@/components/cards/PluginCard.vue'
@@ -102,6 +103,9 @@ const labelFilterOptions = ref<string[]>([])
 // 插件库过滤项
 const repoFilterOptions = ref<string[]>([])
 
+// 每个插件的图标 URL
+const pluginIconUrls = ref<Record<string, string>>({})
+
 // 初始化过滤选项
 function initOptions(item: Plugin) {
   const optionValue = (options: Array<string>, value: string | undefined) => {
@@ -174,14 +178,37 @@ function pluginIconError(item: Plugin) {
 }
 
 // 插件图标地址
-function pluginIcon(item: Plugin) {
-  // 如果图片加载错误
-  if (pluginIconLoaded.value[item.id || '0'] === false) return noImage
-  // 如果是网络图片则使用代理后返回
-  if (item?.plugin_icon?.startsWith('http'))
-    return `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodeURIComponent(item?.plugin_icon)}`
+async function pluginIcon(item: Plugin): Promise<string> {
+  if (pluginIconLoaded.value[item.id || '0'] === false) {
+    return noImage
+  }
 
-  return `./plugin_icon/${item?.plugin_icon}`
+  const token = await resource.getResourceToken()
+  if (item?.plugin_icon?.startsWith('http')) {
+    return `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodeURIComponent(
+      item.plugin_icon,
+    )}&token=${token}`
+  } else {
+    return `./plugin_icon/${item.plugin_icon}`
+  }
+}
+
+// 在列表项被渲染时调用
+function loadPluginIcon(item: Plugin) {
+  const itemId = item.id as string
+  if (!itemId) return
+
+  // 检查该 item 是否已经有图标
+  if (!pluginIconUrls.value[itemId]) {
+    pluginIcon(item)
+      .then(iconUrl => {
+        pluginIconUrls.value[itemId] = iconUrl
+      })
+      .catch(() => {
+        // 在出现错误时，设置默认图标
+        pluginIconUrls.value[itemId] = noImage
+      })
+  }
 }
 
 // 过滤插件
@@ -331,6 +358,15 @@ onBeforeMount(async () => {
     }
   }
 })
+
+// 当 filterPlugins 发生变化时，加载插件图标
+watch(
+  filterPlugins,
+  newValue => {
+    newValue.forEach(item => loadPluginIcon(item))
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -476,7 +512,11 @@ onBeforeMount(async () => {
             <VListItem @click="openPlugin(item)">
               <template #prepend>
                 <VAvatar>
-                  <VImg :src="pluginIcon(item)" @error="pluginIconError(item)">
+                  <VImg
+                    :src="pluginIconUrls.value[item.id || ''] || noImage"
+                    @error="pluginIconError(item)"
+                    crossorigin="anonymous"
+                  >
                     <template #placeholder>
                       <div class="w-full h-full">
                         <VSkeletonLoader class="object-cover aspect-w-1 aspect-h-1" />

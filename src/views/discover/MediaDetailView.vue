@@ -3,6 +3,7 @@ import { useToast } from 'vue-toast-notification'
 import PersonCardSlideView from './PersonCardSlideView.vue'
 import MediaCardSlideView from './MediaCardSlideView.vue'
 import api from '@/api'
+import resource from '@/api/resource'
 import type { MediaInfo, NotExistMediaInfo, Subscribe, TmdbEpisode } from '@/api/types'
 import NoDataFound from '@/components/NoDataFound.vue'
 import { doneNProgress, startNProgress } from '@/api/nprogress'
@@ -54,6 +55,15 @@ const seasonsSubscribed = ref<{ [key: number]: boolean }>({})
 
 // 订阅编号
 const subscribeId = ref<number>()
+
+// poster url
+const posterUrl = ref<string>('')
+
+// backdrop url
+const backdropUrl = ref<string>('')
+
+// w500 图片 url
+const w500ImageUrl = ref<string>('')
 
 // 获得mediaid
 function getMediaId() {
@@ -317,35 +327,47 @@ function getEpisodeImage(stillPath: string) {
 }
 
 // TMDB图片转换为w500大小
-function getW500Image(url = '') {
+async function getW500Image(imgRef: Ref<string>, url = '') {
   if (!url) return ''
   url = url.replace('original', 'w500')
+  const token = await resource.getResourceToken()
   // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  return url
+  if (globalSettings.GLOBAL_IMAGE_CACHE) {
+    imgRef.value = `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(
+      url,
+    )}&token=${token}`
+  } else {
+    imgRef.value = url
+  }
 }
 
 // 计算Poster地址
-const getPosterUrl: Ref<string> = computed(() => {
+async function getPosterUrl(imgRef: Ref<string>) {
   const url = mediaDetail.value.poster_path ?? ''
-  // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  // 如果地址中包含douban则使用中转代理
-  if (url.includes('doubanio.com'))
-    return `${import.meta.env.VITE_API_BASE_URL}douban/img?imgurl=${encodeURIComponent(url)}`
-  return url
-})
+  const token = await resource.getResourceToken()
+  if (globalSettings.GLOBAL_IMAGE_CACHE) {
+    imgRef.value = `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(
+      url,
+    )}&token=${token}`
+  } else if (url.includes('doubanio.com')) {
+    imgRef.value = `${import.meta.env.VITE_API_BASE_URL}douban/img?imgurl=${encodeURIComponent(url)}&token=${token}`
+  } else {
+    imgRef.value = url
+  }
+}
 
-// 计算backdrop地址
-const getBackdropUrl: Ref<string> = computed(() => {
+// 计算Backdrop地址，并直接更新传入的 ref
+async function getBackdropUrl(imgRef: Ref<string>) {
   const url = mediaDetail.value.backdrop_path ?? ''
-  // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  return url
-})
+  const token = await resource.getResourceToken()
+  if (globalSettings.GLOBAL_IMAGE_CACHE) {
+    imgRef.value = `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(
+      url,
+    )}&token=${token}`
+  } else {
+    imgRef.value = url
+  }
+}
 
 // 获取发行国家名称
 const getProductionCountries = computed(() => {
@@ -453,25 +475,28 @@ function onSubscribeEditRemove() {
 onBeforeMount(() => {
   getMediaDetail()
 })
+
+// 异步更新图片 URL
+onMounted(() => {
+  getPosterUrl(posterUrl)
+  getBackdropUrl(backdropUrl)
+  getW500Image(w500ImageUrl, mediaDetail.value.poster_path)
+})
 </script>
 
 <template>
   <LoadingBanner v-if="!isRefreshed" class="mt-12" />
   <div v-if="mediaDetail.tmdb_id || mediaDetail.douban_id || mediaDetail.bangumi_id" class="max-w-8xl mx-auto px-4">
-    <template v-if="getBackdropUrl || getPosterUrl">
+    <template v-if="backdropUrl || posterUrl">
       <div class="vue-media-back absolute left-0 top-0 w-full h-96">
-        <VImg class="h-96" position="top" :src="getBackdropUrl || getPosterUrl" cover />
+        <VImg class="h-96" position="top" :src="backdropUrl || posterUrl" cover />
       </div>
       <div class="vue-media-back absolute left-0 top-0 w-full h-96" />
     </template>
     <div class="media-page">
       <div class="media-header">
         <div class="media-poster">
-          <VImg
-            :src="getW500Image(mediaDetail.poster_path)"
-            cover
-            class="object-cover aspect-w-2 aspect-h-3 ring-1 ring-gray-500"
-          >
+          <VImg :src="w500ImageUrl" cover class="object-cover aspect-w-2 aspect-h-3 ring-1 ring-gray-500">
             <template #placeholder>
               <div class="w-full h-full">
                 <VSkeletonLoader class="object-cover aspect-w-2 aspect-h-3" />

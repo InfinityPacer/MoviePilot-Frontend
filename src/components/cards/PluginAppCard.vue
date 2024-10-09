@@ -2,6 +2,7 @@
 import { useToast } from 'vue-toast-notification'
 import VersionHistory from '../misc/VersionHistory.vue'
 import api from '@/api'
+import resource from '@/api/resource'
 import type { Plugin } from '@/api/types'
 import noImage from '@images/logos/plugin.png'
 import { getDominantColor } from '@/@core/utils/image'
@@ -49,6 +50,9 @@ const pluginLabels = computed(() => {
   return props.plugin.plugin_label.split(',')
 })
 
+// ICON路径
+const iconPath = ref<string>('')
+
 // 图片加载完成
 async function imageLoaded() {
   isImageLoaded.value = true
@@ -87,15 +91,22 @@ async function installPlugin() {
   }
 }
 
-// 计算图标路径
-const iconPath: Ref<string> = computed(() => {
-  if (imageLoadError.value) return noImage
+// 计算ICON路径
+async function fetchIconPath(imgRef: Ref<string>) {
+  if (imageLoadError.value) {
+    imgRef.value = noImage
+    return
+  }
+  const token = await resource.getResourceToken()
   // 如果是网络图片则使用代理后返回
-  if (props.plugin?.plugin_icon?.startsWith('http'))
-    return `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodeURIComponent(props.plugin?.plugin_icon)}`
-
-  return `./plugin_icon/${props.plugin?.plugin_icon}`
-})
+  if (props.plugin?.plugin_icon?.startsWith('http')) {
+    imgRef.value = `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodeURIComponent(
+      props.plugin?.plugin_icon,
+    )}&token=${token}`
+  } else {
+    imgRef.value = `./plugin_icon/${props.plugin?.plugin_icon}`
+  }
+}
 
 // 访问插件页面
 function visitPluginPage() {
@@ -146,6 +157,11 @@ const dropdownItems = ref([
     },
   },
 ])
+
+// 异步更新ICON路径
+onMounted(() => {
+  fetchIconPath(iconPath)
+})
 </script>
 
 <template>

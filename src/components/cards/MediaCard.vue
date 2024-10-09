@@ -4,6 +4,7 @@ import { useToast } from 'vue-toast-notification'
 import SubscribeEditDialog from '../dialog/SubscribeEditDialog.vue'
 import { formatSeason } from '@/@core/utils/formatters'
 import api from '@/api'
+import resource from '@/api/resource'
 import { doneNProgress, startNProgress } from '@/api/nprogress'
 import type { MediaInfo, NotExistMediaInfo, Subscribe, TmdbSeason } from '@/api/types'
 import router from '@/router'
@@ -66,6 +67,9 @@ const sourceIconDict: { [key: string]: any } = {
   douban: doubanImage,
   bangumi: bangumiImage,
 }
+
+// 图片 URL
+const imgUrl = ref<string>(noImage)
 
 // 获得mediaid
 function getMediaId() {
@@ -365,18 +369,32 @@ onBeforeMount(() => {
   handleCheckExists()
 })
 
-// 计算图片地址
-const getImgUrl: Ref<string> = computed(() => {
-  if (imageLoadError.value) return noImage
-  const url = props.media?.poster_path?.replace('original', 'w500') ?? noImage
-  // 使用图片缓存
-  if (globalSettings.GLOBAL_IMAGE_CACHE)
-    return `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(url)}`
-  // 如果地址中包含douban则使用中转代理
-  if (url.includes('doubanio.com'))
-    return `${import.meta.env.VITE_API_BASE_URL}douban/img?imgurl=${encodeURIComponent(url)}`
-  return url
+// 异步更新图片 URL
+onMounted(() => {
+  fetchImageUrl(imgUrl)
 })
+
+// 计算图片地址
+async function fetchImageUrl(imgRef: Ref<string>) {
+  if (imageLoadError.value) {
+    imgRef.value = noImage
+    return
+  }
+  const token = await resource.getResourceToken()
+  const url = props.media?.poster_path?.replace('original', 'w500')
+  if (!url) {
+    imgRef.value = noImage
+    return
+  }
+  if (globalSettings.GLOBAL_IMAGE_CACHE) {
+    imgRef.value = `${import.meta.env.VITE_API_BASE_URL}system/cache/image?url=${encodeURIComponent(
+      url,
+    )}&token=${token}`
+  } else if (url.includes('doubanio.com')) {
+    imgRef.value = `${import.meta.env.VITE_API_BASE_URL}douban/img?imgurl=${encodeURIComponent(url)}&token=${token}`
+  }
+  imgRef.value = url
+}
 
 // 拼装季图片地址
 function getSeasonPoster(posterPath: string) {
@@ -414,7 +432,7 @@ function getYear(airDate: string) {
       >
         <VImg
           aspect-ratio="2/3"
-          :src="getImgUrl"
+          :src="imgUrl"
           class="object-cover aspect-w-2 aspect-h-3"
           :class="hover.isHovering ? 'on-hover' : ''"
           cover

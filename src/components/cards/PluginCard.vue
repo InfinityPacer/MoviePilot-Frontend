@@ -3,6 +3,7 @@ import { useToast } from 'vue-toast-notification'
 import { useConfirm } from 'vuetify-use-dialog'
 import { VIcon } from 'vuetify/lib/components/index.mjs'
 import api from '@/api'
+import resource from '@/api/resource'
 import type { Plugin } from '@/api/types'
 import FormRender from '@/components/render/FormRender.vue'
 import PageRender from '@/components/render/PageRender.vue'
@@ -73,6 +74,9 @@ const imageLoadError = ref(false)
 
 // 更新日志弹窗
 const releaseDialog = ref(false)
+
+// ICON路径
+const iconPath = ref<string>('')
 
 // 监听动作标识，如为true则打开详情
 watch(
@@ -206,15 +210,22 @@ async function showPluginConfig() {
   pluginConfigDialog.value = true
 }
 
-// 计算图标路径
-const iconPath: Ref<string> = computed(() => {
-  if (imageLoadError.value) return noImage
+// 计算ICON路径
+async function fetchIconPath(imgRef: Ref<string>) {
+  if (imageLoadError.value) {
+    imgRef.value = noImage
+    return
+  }
+  const token = await resource.getResourceToken()
   // 如果是网络图片则使用代理后返回
-  if (props.plugin?.plugin_icon?.startsWith('http'))
-    return `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodeURIComponent(props.plugin?.plugin_icon)}`
-
-  return `./plugin_icon/${props.plugin?.plugin_icon}`
-})
+  if (props.plugin?.plugin_icon?.startsWith('http')) {
+    imgRef.value = `${import.meta.env.VITE_API_BASE_URL}system/img/1?imgurl=${encodeURIComponent(
+      props.plugin?.plugin_icon,
+    )}&token=${token}`
+  } else {
+    imgRef.value = `./plugin_icon/${props.plugin?.plugin_icon}`
+  }
+}
 
 // 重置插件
 async function resetPlugin() {
@@ -378,6 +389,11 @@ watch(
     if (newOpenState) openPluginDetail()
   },
 )
+
+// 异步更新ICON路径
+onMounted(() => {
+  fetchIconPath(iconPath)
+})
 </script>
 
 <template>

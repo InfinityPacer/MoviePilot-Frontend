@@ -2,7 +2,9 @@ import type { Module } from 'vuex'
 
 // 定义状态类型
 interface AuthState {
-  token: string | null
+  token: string | null // 用户认证令牌
+  resourceToken: string | null // 资源访问令牌
+  resourceTokenExpire: number | null // 资源令牌过期时间（时间戳）
   remember: boolean
   superUser: boolean
   userName: string
@@ -21,7 +23,9 @@ interface RootState {
 const authModule: Module<AuthState, RootState> = {
   namespaced: true,
   state: {
-    token: null, // 用户令牌
+    token: null, // 用户认证令牌
+    resourceToken: null, // 资源访问令牌
+    resourceTokenExpire: null, // 资源令牌过期时间
     remember: false, // 记住我
     superUser: false, // 超级管理员
     userName: '', // 用户名
@@ -59,6 +63,14 @@ const authModule: Module<AuthState, RootState> = {
     clearToken(state) {
       state.token = null
     },
+    setResourceToken(state, { token, expire }: { token: string; expire: number }) {
+      state.resourceToken = token
+      state.resourceTokenExpire = expire
+    },
+    clearResourceToken(state) {
+      state.resourceToken = null
+      state.resourceTokenExpire = null
+    },
     setRemember(state, remember: boolean) {
       state.remember = remember
     },
@@ -93,11 +105,20 @@ const authModule: Module<AuthState, RootState> = {
     },
     logout({ commit }) {
       commit('clearToken')
+      commit('clearResourceToken')
       commit('setOriginalPath', null)
+    },
+    setResourceToken({ commit }, { token, expire }: { token: string; expire: number }) {
+      commit('setResourceToken', { token, expire })
+    },
+    clearResourceToken({ commit }) {
+      commit('clearResourceToken')
     },
   },
   getters: {
     getToken: state => state.token,
+    getResourceToken: state => state.resourceToken,
+    getResourceTokenexpire: state => state.resourceTokenExpire,
     getRemember: state => state.remember,
     getSuperUser: state => state.superUser,
     getUserName: state => state.userName,

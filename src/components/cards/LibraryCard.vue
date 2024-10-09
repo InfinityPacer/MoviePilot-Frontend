@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import type { MediaServerLibrary } from '@/api/types'
+import resource from '@/api/resource'
 import plex from '@images/misc/plex.png'
 import emby from '@images/misc/emby.png'
 import jellyfin from '@images/misc/jellyfin.png'
@@ -14,8 +15,8 @@ const props = defineProps({
 // canvas
 const canvasRef = ref<HTMLCanvasElement>()
 
-// 图片地址
-const imgUrl = ref('')
+// 图片 URL
+const imgUrl = ref<string>('')
 
 // 图片是否加载完成
 const imageLoaded = ref(false)
@@ -46,10 +47,14 @@ function goPlay() {
   if (props.media?.link) window.open(props.media?.link, '_blank')
 }
 
-// 生成图片代理路径
-function getImgUrl(url: string) {
-  if (!url) return getDefaultImage()
-  else return `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(url)}`
+// 计算图片地址
+async function fetchImageUrl(url: string) {
+  if (!url) {
+    return getDefaultImage()
+  }
+
+  const token = await resource.getResourceToken()
+  return `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(url)}&token=${token}`
 }
 
 // 根据多张图片生成媒体库封面
@@ -59,8 +64,11 @@ async function drawImages(imageList: string[]) {
   if (IMAGES.length === 0) return getDefaultImage()
 
   // 为所有图片添加system/img前缀
+  const token = await resource.getResourceToken()
   for (let i = 0; i < IMAGES.length; i++)
-    IMAGES[i] = `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(IMAGES[i])}`
+    IMAGES[i] = `${import.meta.env.VITE_API_BASE_URL}system/img/0?imgurl=${encodeURIComponent(
+      IMAGES[i],
+    )}&token=${token}`
 
   // canvas
   const canvas = canvasRef.value
@@ -131,10 +139,11 @@ async function drawImages(imageList: string[]) {
   return canvas.toDataURL('image/png')
 }
 
+// 异步更新图片 URL
 onMounted(async () => {
   if (props.media?.image_list && props.media?.image_list.length > 0)
     imgUrl.value = await drawImages(props.media?.image_list || [])
-  else imgUrl.value = getImgUrl(props.media?.image || '')
+  else imgUrl.value = await fetchImageUrl(props.media?.image || '')
 })
 </script>
 

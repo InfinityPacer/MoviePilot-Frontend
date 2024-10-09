@@ -1,8 +1,8 @@
 <script lang="ts" setup>
-import store from '@/store'
 import type { Message } from '@/api/types'
 import MessageCard from '@/components/cards/MessageCard.vue'
 import api from '@/api'
+import resouce from '@/api/resource'
 
 // 定义事件
 const emit = defineEmits(['scroll'])
@@ -28,8 +28,8 @@ const lastTime = ref('')
 let eventSource: EventSource | null = null
 
 // SSE持续获取消息
-function startSSEMessager() {
-  const token = store.state.auth.token
+async function startSSEMessager() {
+  const token = await resouce.getResourceToken()
   if (token) {
     eventSource = new EventSource(`${import.meta.env.VITE_API_BASE_URL}system/message?token=${token}&role=user`)
 
