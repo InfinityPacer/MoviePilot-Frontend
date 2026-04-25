@@ -284,6 +284,7 @@ export default {
   },
   navItems: {
     dashboard: '仪表盘',
+    wrapped: 'Wrapped',
     mediaInfo: '媒体库',
     recommend: '推荐',
     site: '站点',

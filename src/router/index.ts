@@ -29,6 +29,14 @@ const router = createRouter({
           },
         },
         {
+          path: '/wrapped',
+          component: () => import('../pages/wrapped.vue'),
+          meta: {
+            keepAlive: true,
+            requiresAuth: true,
+          },
+        },
+        {
           path: '/recommend',
           component: () => import('../pages/recommend.vue'),
           meta: {

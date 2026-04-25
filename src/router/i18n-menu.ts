@@ -19,6 +19,15 @@ export function getNavMenus(t: Composer['t']) {
       permission: 'manage',
     },
     {
+      title: t('navItems.wrapped'),
+      icon: 'mdi-chart-timeline-variant-shimmer',
+      to: '/wrapped',
+      header: t('menu.start'),
+      admin: false,
+      footer: false,
+      permission: 'manage',
+    },
+    {
       title: t('navItems.searchResult'),
       icon: 'mdi-magnify',
       to: '/resource',

@@ -285,6 +285,7 @@ export default {
   },
   navItems: {
     dashboard: 'Dashboard',
+    wrapped: 'Wrapped',
     mediaInfo: 'Media Library',
     recommend: 'Recommend',
     site: 'Sites',

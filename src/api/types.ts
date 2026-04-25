@@ -1472,3 +1472,190 @@ export interface CategoryConfig {
   movie?: { [key: string]: CategoryRule }
   tv?: { [key: string]: CategoryRule }
 }
+
+// Wrapped 时间范围
+export type WrappedRange = 'day' | 'week' | 'month' | 'year' | 'all'
+
+// Wrapped 主指标
+export type WrappedMetric = 'download' | 'transfer' | 'success_rate' | 'storage_used' | 'library_total'
+
+// Wrapped 历史口径
+export type WrappedHistoryMode = 'backfilled' | 'snapshot' | 'projected' | 'optional'
+
+// Wrapped 单指标口径说明
+export interface WrappedMetricMeta {
+  // 指标标识
+  metric: string
+  // 指标名称
+  label: string
+  // 历史口径
+  history_mode: WrappedHistoryMode
+  // 历史起始日期
+  history_start_at?: string
+  // 是否可与上一周期比较
+  comparable_to_previous_period: boolean
+  // 数据质量说明
+  data_quality_note?: string
+}
+
+// Wrapped 总览卡片
+export interface WrappedMetricCard {
+  // 指标标识
+  metric: string
+  // 展示标题
+  title: string
+  // 当前周期数值
+  value: number
+  // 展示单位
+  unit?: string
+  // 上一周期数值
+  previous_value?: number
+  // 变化率
+  delta_ratio?: number
+  // 指标口径
+  meta: WrappedMetricMeta
+}
+
+// Wrapped 曲线点
+export interface WrappedSeriesPoint {
+  // 时间桶
+  bucket: string
+  // 当前周期数值
+  value?: number
+  // 上一周期数值
+  previous_value?: number
+}
+
+// Wrapped 曲线响应
+export interface WrappedSeries {
+  // 查询范围
+  range: WrappedRange
+  // 查询指标
+  metric: WrappedMetric
+  // 展示粒度
+  granularity: 'day' | 'week' | 'month'
+  // 曲线数据
+  series: WrappedSeriesPoint[]
+  // 指标口径
+  metric_meta: WrappedMetricMeta
+  // 是否启用对比
+  compare_enabled: boolean
+  // 空数据原因
+  empty_reason?: string
+}
+
+// Wrapped 总览响应
+export interface WrappedOverview {
+  // 查询范围
+  range: WrappedRange
+  // 展示粒度
+  granularity: 'day' | 'week' | 'month'
+  // 总览卡片
+  cards: WrappedMetricCard[]
+  // 指标口径索引
+  metric_meta: Record<string, WrappedMetricMeta>
+  // 是否启用对比
+  compare_enabled: boolean
+  // 空数据原因
+  empty_reason?: string
+  // 重建状态
+  rebuild_status?: WrappedRebuildStatus
+}
+
+// Wrapped 榜单项
+export interface WrappedRankingItem {
+  // 榜单项名称
+  name: string
+  // 榜单项数值
+  value: number
+  // 榜单项占比
+  ratio?: number
+}
+
+// Wrapped 榜单分组
+export interface WrappedRankingGroup {
+  // 分组标识
+  key: string
+  // 分组标题
+  title: string
+  // 历史口径
+  history_mode: WrappedHistoryMode
+  // 榜单项
+  items: WrappedRankingItem[]
+  // 数据质量说明
+  data_quality_note?: string
+}
+
+// Wrapped 榜单响应
+export interface WrappedRankings {
+  // 查询范围
+  range: WrappedRange
+  // 榜单分组
+  groups: WrappedRankingGroup[]
+  // 空数据原因
+  empty_reason?: string
+}
+
+// Wrapped 高光故事
+export interface WrappedHighlight {
+  // 高光标识
+  key: string
+  // 高光标题
+  title: string
+  // 高光数值
+  value?: number
+  // 高光日期
+  date?: string
+  // 历史口径
+  history_mode: WrappedHistoryMode
+  // 展示说明
+  description?: string
+}
+
+// Wrapped 高光响应
+export interface WrappedHighlights {
+  // 查询范围
+  range: WrappedRange
+  // 高光列表
+  highlights: WrappedHighlight[]
+  // 空数据原因
+  empty_reason?: string
+}
+
+// Wrapped 能力响应
+export interface WrappedAvailability {
+  // 是否支持行为历史
+  behavior_history_supported: boolean
+  // 是否支持媒体库画像
+  catalog_snapshot_supported: boolean
+  // 是否支持字幕覆盖
+  subtitle_coverage_supported: boolean
+  // 是否支持观影历史
+  watch_history_supported: boolean
+  // 是否支持用户观影维度
+  watch_user_dimension_supported: boolean
+  // 能力说明
+  notes: string[]
+}
+
+// Wrapped 重建状态
+export interface WrappedRebuildStatus {
+  // 任务标识
+  job_key: string
+  // 任务状态
+  status: 'idle' | 'running' | 'success' | 'failed'
+  // 任务进度
+  progress: number
+  // 状态消息
+  message?: string
+  // 错误信息
+  error?: string
+  // 开始时间
+  started_at?: string
+  // 结束时间
+  finished_at?: string
+  // 更新时间
+  updated_at?: string
+  // 任务参数
+  payload: Record<string, any>
+}

@@ -284,6 +284,7 @@ export default {
   },
   navItems: {
     dashboard: '儀表盤',
+    wrapped: 'Wrapped',
     mediaInfo: '媒體庫',
     recommend: '推薦',
     site: '站點',
