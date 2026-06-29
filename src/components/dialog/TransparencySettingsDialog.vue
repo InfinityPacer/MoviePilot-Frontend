@@ -38,10 +38,12 @@ const {
   onBackgroundBlurChange,
   onBackgroundPosterOpacityChange,
   onBlurChange,
+  onPerformanceModeChange,
   onOpacityChange,
   resetTransparencySettings,
   transparencyBlur,
   transparencyOpacity,
+  transparencyPerformanceMode,
 } = useTransparencySettings()
 </script>
 
@@ -104,9 +106,14 @@ const {
           </div>
 
           <div>
-            <div class="d-flex align-center justify-space-between mb-2">
+            <div class="d-flex align-center justify-space-between mb-2 gap-2">
               <span class="text-body-2">{{ t('theme.backgroundBlur') }}</span>
-              <span class="text-caption">{{ backgroundBlur }}px</span>
+              <div class="d-flex align-center gap-2">
+                <VChip v-if="transparencyPerformanceMode" size="x-small" color="success" variant="tonal">
+                  {{ t('theme.transparencyPerformanceModeActive') }}
+                </VChip>
+                <span class="text-caption">{{ backgroundBlur }}px</span>
+              </div>
             </div>
             <VSlider
               v-model="backgroundBlur"
@@ -117,6 +124,16 @@ const {
               @update:model-value="onBackgroundBlurChange"
             />
           </div>
+
+          <VSwitch
+            v-model="transparencyPerformanceMode"
+            :label="t('theme.transparencyPerformanceMode')"
+            :hint="t('theme.transparencyPerformanceModeHint')"
+            persistent-hint
+            color="primary"
+            density="comfortable"
+            @update:model-value="onPerformanceModeChange"
+          />
 
           <div>
             <span class="text-body-2 d-block mb-2">{{ t('common.preset') }}</span>

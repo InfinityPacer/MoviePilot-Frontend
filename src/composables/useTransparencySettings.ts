@@ -6,18 +6,22 @@ export interface TransparencySettings {
   blur: number
   level: string
   opacity: number
+  performanceMode: boolean
 }
 
 export const transparencyPresets = {
-  low: { opacity: 0.1, blur: 5 },
+  low: { opacity: 0.6, blur: 5 },
   medium: { opacity: 0.3, blur: 10 },
-  high: { opacity: 0.6, blur: 15 },
+  high: { opacity: 0.1, blur: 15 },
 }
+
+export const TRANSPARENCY_SETTINGS_CHANGED_EVENT = 'transparency-settings-changed'
 
 /** 将数值限制在指定范围内。 */
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
+
 
 /** 从本地存储读取透明主题设置。 */
 export function readTransparencySettings(): TransparencySettings {
@@ -27,6 +31,7 @@ export function readTransparencySettings(): TransparencySettings {
     backgroundPosterOpacity: parseFloat(localStorage.getItem('transparency-background-poster-opacity') || '0'),
     backgroundBlur: parseFloat(localStorage.getItem('transparency-background-blur') || '16'),
     level: localStorage.getItem('transparency-level') || 'medium',
+    performanceMode: localStorage.getItem('transparency-performance-mode') === 'true',
   }
 }
 
@@ -40,6 +45,7 @@ export function applyTransparencySettings(settings: TransparencySettings) {
       : 0,
     backgroundBlur: Number.isFinite(settings.backgroundBlur) ? clamp(settings.backgroundBlur, 0, 30) : 16,
     level: settings.level,
+    performanceMode: settings.performanceMode === true,
   }
 
   const root = document.documentElement
@@ -51,12 +57,18 @@ export function applyTransparencySettings(settings: TransparencySettings) {
   root.style.setProperty('--transparent-blur-heavy', `${normalized.blur * 1.6}px`)
   root.style.setProperty('--transparent-background-poster-opacity', (1 - normalized.backgroundPosterOpacity).toString())
   root.style.setProperty('--transparent-background-blur', `${normalized.backgroundBlur}px`)
+  root.classList.toggle('transparent-blur-disabled', normalized.blur <= 0)
+  root.classList.toggle('transparent-background-blur-disabled', normalized.backgroundBlur <= 0)
+  root.classList.toggle('transparent-performance-mode', normalized.performanceMode)
 
   localStorage.setItem('transparency-opacity', normalized.opacity.toString())
   localStorage.setItem('transparency-blur', normalized.blur.toString())
   localStorage.setItem('transparency-background-poster-opacity', normalized.backgroundPosterOpacity.toString())
   localStorage.setItem('transparency-background-blur', normalized.backgroundBlur.toString())
   localStorage.setItem('transparency-level', normalized.level)
+  localStorage.setItem('transparency-performance-mode', normalized.performanceMode.toString())
+
+  window.dispatchEvent(new CustomEvent<TransparencySettings>(TRANSPARENCY_SETTINGS_CHANGED_EVENT, { detail: normalized }))
 
   return normalized
 }
@@ -74,6 +86,7 @@ export function useTransparencySettings() {
   const backgroundPosterOpacity = ref(storedSettings.backgroundPosterOpacity)
   const backgroundBlur = ref(storedSettings.backgroundBlur)
   const transparencyLevel = ref(storedSettings.level)
+  const transparencyPerformanceMode = ref(storedSettings.performanceMode)
 
   const currentPresetLevel = computed(() => {
     for (const [level, preset] of Object.entries(transparencyPresets)) {
@@ -96,6 +109,7 @@ export function useTransparencySettings() {
       backgroundPosterOpacity: backgroundPosterOpacity.value,
       backgroundBlur: backgroundBlur.value,
       level: transparencyLevel.value,
+      performanceMode: transparencyPerformanceMode.value,
     })
 
     transparencyOpacity.value = normalized.opacity
@@ -103,6 +117,7 @@ export function useTransparencySettings() {
     backgroundPosterOpacity.value = normalized.backgroundPosterOpacity
     backgroundBlur.value = normalized.backgroundBlur
     transparencyLevel.value = normalized.level
+    transparencyPerformanceMode.value = normalized.performanceMode
   }
 
   /** 按预设级别调整透明度和模糊度。 */
@@ -149,6 +164,11 @@ export function useTransparencySettings() {
     syncTransparencySettings()
   }
 
+  /** 处理透明主题性能优先模式变化。 */
+  function onPerformanceModeChange() {
+    syncTransparencySettings()
+  }
+
   /** 重置透明主题设置为默认值。 */
   function resetTransparencySettings() {
     transparencyOpacity.value = transparencyPresets.medium.opacity
@@ -156,6 +176,7 @@ export function useTransparencySettings() {
     backgroundPosterOpacity.value = 0
     backgroundBlur.value = 16
     transparencyLevel.value = 'medium'
+    transparencyPerformanceMode.value = false
     syncTransparencySettings()
   }
 
@@ -167,11 +188,13 @@ export function useTransparencySettings() {
     onBackgroundBlurChange,
     onBackgroundPosterOpacityChange,
     onBlurChange,
+    onPerformanceModeChange,
     onOpacityChange,
     resetTransparencySettings,
     syncTransparencySettings,
     transparencyBlur,
     transparencyOpacity,
     transparencyLevel,
+    transparencyPerformanceMode,
   }
 }

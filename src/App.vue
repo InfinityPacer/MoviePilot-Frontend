@@ -12,6 +12,7 @@ import { addBackgroundTimer, removeBackgroundTimer } from '@/utils/backgroundMan
 import PWAInstallPrompt from '@/components/pwa/PWAInstallPrompt.vue'
 import SharedDialogHost from '@/components/dialog/SharedDialogHost.vue'
 import { applyStoredThemeCustomizerAppearance } from '@/composables/useThemeCustomizer'
+import { TRANSPARENCY_SETTINGS_CHANGED_EVENT, type TransparencySettings } from '@/composables/useTransparencySettings'
 import { completeLaunchLoading } from '@/composables/useLaunchLoading'
 import { usePWA } from '@/composables/usePWA'
 import { themeManager } from '@/utils/themeManager'
@@ -63,6 +64,15 @@ const isLoginWallpaperRoute = computed(() => !isLogin.value && route.path === LO
 const shouldLoadBackgroundImages = computed(
   () => isLoginWallpaperRoute.value || (Boolean(isLogin.value) && isTransparentTheme.value),
 )
+const transparentBackgroundBlur = ref(16)
+const transparencyPerformanceMode = ref(localStorage.getItem('transparency-performance-mode') === 'true')
+const shouldRenderGlobalBlurLayer = computed(
+  () =>
+    Boolean(isLogin.value) &&
+    isTransparentTheme.value &&
+    transparentBackgroundBlur.value > 0 &&
+    !transparencyPerformanceMode.value,
+)
 let backgroundRetryTimer: number | null = null
 let backgroundRequestController: AbortController | null = null
 let authenticatedStateTimer: number | null = null
@@ -75,14 +85,20 @@ function getStoredNumber(key: string, fallback: number, min: number, max: number
 }
 
 function applyTransparentBackgroundSettings() {
-  document.documentElement.style.setProperty(
-    '--transparent-background-poster-opacity',
-    (1 - getStoredNumber('transparency-background-poster-opacity', 0, 0, 1)).toString(),
-  )
-  document.documentElement.style.setProperty(
-    '--transparent-background-blur',
-    `${getStoredNumber('transparency-background-blur', 16, 0, 30)}px`,
-  )
+  const backgroundPosterOpacity = getStoredNumber('transparency-background-poster-opacity', 0, 0, 1)
+  const backgroundBlur = getStoredNumber('transparency-background-blur', 16, 0, 30)
+
+  transparentBackgroundBlur.value = backgroundBlur
+  document.documentElement.style.setProperty('--transparent-background-poster-opacity', (1 - backgroundPosterOpacity).toString())
+  document.documentElement.style.setProperty('--transparent-background-blur', `${backgroundBlur}px`)
+  transparencyPerformanceMode.value = localStorage.getItem('transparency-performance-mode') === 'true'
+  document.documentElement.classList.toggle('transparent-background-blur-disabled', backgroundBlur <= 0)
+}
+
+function handleTransparencySettingsChanged(event: Event) {
+  const { backgroundBlur, performanceMode } = (event as CustomEvent<TransparencySettings>).detail
+  transparentBackgroundBlur.value = backgroundBlur
+  transparencyPerformanceMode.value = performanceMode
 }
 
 applyTransparentBackgroundSettings()
@@ -360,6 +376,7 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityThemeSync)
   window.addEventListener('pageshow', handlePageShowThemeSync)
   window.addEventListener('focus', handlePageShowThemeSync)
+  window.addEventListener(TRANSPARENCY_SETTINGS_CHANGED_EVENT, handleTransparencySettingsChanged)
 
   // 登录页壁纸仅在未登录登录页需要，避免其他首屏额外发起图片列表请求。
   watch(
@@ -413,6 +430,7 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityThemeSync)
   window.removeEventListener('pageshow', handlePageShowThemeSync)
   window.removeEventListener('focus', handlePageShowThemeSync)
+  window.removeEventListener(TRANSPARENCY_SETTINGS_CHANGED_EVENT, handleTransparencySettingsChanged)
 })
 </script>
 
@@ -422,7 +440,10 @@ onUnmounted(() => {
     <div
       v-if="backgroundImages.length > 0 && (isTransparentTheme || !isLogin)"
       class="background-container"
-      :class="{ 'is-transparent-theme': isTransparentTheme && isLogin }"
+      :class="{
+        'is-transparent-theme': isTransparentTheme && isLogin,
+        'is-transparent-performance-mode': isTransparentTheme && isLogin && transparencyPerformanceMode,
+      }"
     >
       <div
         v-for="(imageUrl, index) in backgroundImages"
@@ -432,7 +453,7 @@ onUnmounted(() => {
         :style="{ 'backgroundImage': `url(${imageUrl})` }"
       />
       <!-- 全局磨砂层 -->
-      <div v-if="isLogin && isTransparentTheme" class="global-blur-layer"></div>
+      <div v-if="shouldRenderGlobalBlurLayer" class="global-blur-layer"></div>
     </div>
     <!-- 页面内容 -->
     <VApp :class="{ 'app-shell--login-wallpaper': isLoginWallpaperRoute }">
@@ -492,6 +513,15 @@ onUnmounted(() => {
 
 .background-container.is-transparent-theme .background-image.active {
   opacity: var(--transparent-background-poster-opacity, 1);
+}
+
+.background-container.is-transparent-performance-mode .background-image.active {
+  filter: blur(var(--transparent-background-blur, 0px));
+  transform: scale(1.03);
+}
+
+.background-container.is-transparent-performance-mode .background-image {
+  transition: opacity 1.5s ease;
 }
 
 /* 全局磨砂层 */
