@@ -28,4 +28,12 @@ describe('glass surface public contract', () => {
       expect(styles).toContain(consumer.style)
     }
   })
+
+  it('keeps login glass on the shared surface registry without a private filter graph', () => {
+    const login = readFileSync(resolve(cwd(), 'src/pages/login.vue'), 'utf8')
+
+    expect(login).not.toContain('login-glass-static-refraction')
+    expect(login).not.toContain('login-glass-filter-defs')
+    expect(login).not.toContain('<feDisplacementMap')
+  })
 })
