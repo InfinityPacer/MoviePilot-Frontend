@@ -27,7 +27,6 @@ import { getDisplayImageUrl } from '@/utils/imageUtils'
 import { configureApexChartsTheme } from '@/utils/apexCharts'
 import { useGlobalOfflineStatus, type ConnectionFailureReason } from '@/composables/useOfflineStatus'
 import { useAppActivityLifecycle } from '@/composables/useAppActivityLifecycle'
-import { useGlassWallpaperTransaction } from '@/composables/useGlassWallpaperTransaction'
 import {
   BACKGROUND_ROTATION_GRACE_MS,
   createBackgroundCandidateOrderResolver,
@@ -153,16 +152,6 @@ const activeImageIndex = ref(0)
 const previousImageIndex = ref<number | null>(null)
 const isBackgroundCrossfading = ref(false)
 const backgroundCrossfadeStartedAt = ref(0)
-const {
-  acknowledgeActivated: acknowledgeOpticalWallpaperActivated,
-  acknowledgePrepared: acknowledgeOpticalWallpaperPrepared,
-  activationRevision: activateOpticalWallpaperRevision,
-  cancel: cancelOpticalWallpaperTransaction,
-  requestedRevision: pendingOpticalWallpaperRevision,
-  requestedUrl: pendingOpticalBackgroundImage,
-  requestActivation: requestOpticalWallpaperActivation,
-  requestPreparation: requestOpticalWallpaperPreparation,
-} = useGlassWallpaperTransaction<number>()
 const resolveBackgroundCandidateOrder = createBackgroundCandidateOrderResolver()
 const { allowsDecorativeMotion, isSuspended: isRenderThrottled, state: appActivityState } = useAppActivityLifecycle()
 const preferredMotion = usePreferredReducedMotion()
@@ -206,25 +195,10 @@ const opticalFlowStrength = computed(() =>
 const opticalQuality = computed(() =>
   isLoginWallpaperRoute.value ? loginGlassSettings.value.quality : effectiveGlassSettings.value.glassQuality,
 )
-const opticalReflectionStrength = computed(() =>
-  isLoginWallpaperRoute.value
-    ? loginGlassSettings.value.reflectionStrength
-    : effectiveGlassSettings.value.glassReflectionStrength,
-)
-const opticalTransparencyStrength = computed(() =>
-  isLoginWallpaperRoute.value
-    ? loginGlassSettings.value.transparencyStrength
-    : effectiveGlassSettings.value.glassTransparencyStrength,
-)
 const opticalTranslationStrength = computed(() =>
   isLoginWallpaperRoute.value
     ? loginGlassSettings.value.translationStrength
     : effectiveGlassSettings.value.glassTranslationStrength,
-)
-const opticalTransmissionStrength = computed(() =>
-  isLoginWallpaperRoute.value
-    ? loginGlassSettings.value.transmissionStrength
-    : effectiveGlassSettings.value.glassTransmissionStrength,
 )
 const shouldUseTransparentBackgroundTreatment = computed(() => isTransparentTheme.value && Boolean(isLogin.value))
 const shouldUseGlassBackgroundTreatment = computed(
@@ -235,25 +209,15 @@ const shouldLoadBackgroundImages = computed(
 )
 const activeBackgroundImage = computed(() => backgroundImages.value[activeImageIndex.value] ?? '')
 const renderedBackgroundLayers = computed(() => backgroundLayers.value)
-const getOpticalBackgroundImage = (imageUrl: string) => imageUrl
 const getPreparedBackgroundImage = (imageUrl: string) => backgroundDisplayImages.value[imageUrl] ?? imageUrl
-const getPreparedOpticalBackgroundImage = (imageUrl: string) =>
-  backgroundDisplayImages.value[imageUrl] ?? getOpticalBackgroundImage(imageUrl)
-const activeOpticalBackgroundImage = computed(() => getPreparedOpticalBackgroundImage(activeBackgroundImage.value))
-const previousOpticalBackgroundImage = computed(() => {
-  const previousIndex = previousImageIndex.value
-  if (previousIndex === null) return ''
-
-  return getPreparedOpticalBackgroundImage(backgroundImages.value[previousIndex] ?? '')
-})
-const shouldRenderGlassOpticalLayer = computed(
+const shouldRenderGlassSurfaceDynamics = computed(
   () =>
     isGlassTheme.value &&
     opticalQuality.value !== 'css' &&
     isInitialRouteReady.value &&
     Boolean(activeBackgroundImage.value),
 )
-const GlassOpticalLayer = defineAsyncComponent(() => import('@/components/theme/GlassOpticalLayer.vue'))
+const GlassSurfaceDynamics = defineAsyncComponent(() => import('@/components/theme/GlassSurfaceDynamics.vue'))
 const transparentBackgroundBlur = ref(16)
 const transparencyGlassQuality = ref<TransparencyGlassQuality>(
   localStorage.getItem('transparency-glass-quality') === 'realtime' ? 'realtime' : 'lightweight',
@@ -525,41 +489,6 @@ function clearBackgroundCrossfadeTimer() {
   }
 }
 
-/** 等待两个 WebGL 呈现 context 完成下一张纹理上传。 */
-async function prepareOpticalWallpaper(url: string) {
-  if (!shouldRenderGlassOpticalLayer.value || !url || url === activeOpticalBackgroundImage.value) {
-    return { ready: true, revision: 0 }
-  }
-
-  const ready = requestOpticalWallpaperPreparation(url)
-  const revision = pendingOpticalWallpaperRevision.value
-
-  return { ready: await ready, revision }
-}
-
-/** 只接受当前待切换 URL 的 renderer 就绪回执。 */
-function handleOpticalWallpaperPrepared(url: string, revision: number) {
-  acknowledgeOpticalWallpaperPrepared(url, revision)
-}
-
-/** 任一 context 无法准备当前候选时取消 revision，禁止后续材质刷新重复加载失效 URL。 */
-function handleOpticalWallpaperPreparationFailed(_url: string, revision: number) {
-  cancelOpticalWallpaperTransaction(revision)
-}
-
-/** 两个 context 均已原子消费 prepared 资源后，以同一时钟提交 DOM 壁纸。 */
-function handleOpticalWallpaperActivated(url: string, revision: number, startedAt: number) {
-  const activation = acknowledgeOpticalWallpaperActivated(url, revision, startedAt)
-  if (!activation) return
-
-  activateBackgroundImage(activation.payload, activation.startedAt)
-}
-
-/** 任一 context 提交失败时取消整个 revision，禁止另一 context 继续持有半提交状态。 */
-function handleOpticalWallpaperActivationFailed(_url: string, revision: number) {
-  cancelOpticalWallpaperTransaction(revision)
-}
-
 // 重置背景图交叉淡入淡出状态。
 function resetBackgroundCrossfade() {
   clearBackgroundCrossfadeTimer()
@@ -624,7 +553,7 @@ function cancelNextBackgroundPreload() {
   }
 }
 
-/** 首屏稳定后才预备轮播候选，避免第二张完整壁纸与 Dashboard 和首张纹理争抢资源。 */
+/** 首屏稳定后才预备轮播候选，避免第二张完整壁纸与 Dashboard 争抢解码资源。 */
 function scheduleNextBackgroundPreload() {
   cancelNextBackgroundPreload()
   if (!allowsBackgroundRotation.value || backgroundImages.value.length <= 1 || document.getElementById('loading-bg')) {
@@ -656,14 +585,14 @@ async function preloadBackgroundCandidate(imageUrl: string) {
   recordGlassLaunchTiming('wallpaper-source-requested', imageUrl)
   if (!isGlassTheme.value) return preloadImage(imageUrl)
 
-  let opticalUrl = getOpticalBackgroundImage(imageUrl)
-  let tone = await loadGlassWallpaperTone(opticalUrl)
+  let displayUrl = imageUrl
+  let tone = await loadGlassWallpaperTone(displayUrl)
   if (!tone.corsReady && isLogin.value) {
     const proxyUrl = getDisplayImageUrl(imageUrl, true)
-    if (proxyUrl !== opticalUrl) {
+    if (proxyUrl !== displayUrl) {
       const proxyTone = await loadGlassWallpaperTone(proxyUrl)
       if (proxyTone.corsReady) {
-        opticalUrl = proxyUrl
+        displayUrl = proxyUrl
         tone = proxyTone
       }
     }
@@ -673,10 +602,10 @@ async function preloadBackgroundCandidate(imageUrl: string) {
     [imageUrl]: tone.profile,
   }
   if (tone.corsReady) {
-    // DOM、tone 与 renderer 共享完全相同的像素源，避免首屏重复下载和解码。
+    // DOM 与 tone 分析共享同一匿名解码地址，避免首屏重复下载。
     backgroundDisplayImages.value = {
       ...backgroundDisplayImages.value,
-      [imageUrl]: opticalUrl,
+      [imageUrl]: displayUrl,
     }
     recordGlassLaunchTiming('wallpaper-source-ready', imageUrl)
     return true
@@ -703,35 +632,17 @@ async function rotateBackgroundImage() {
 
     const nextIndex = (activeIndex + offset) % backgroundImages.value.length
     const nextImage = backgroundImages.value[nextIndex]
-    let opticalRevision = 0
-    try {
-      if (!(await preloadBackgroundCandidate(nextImage))) continue
-      const opticalImage = shouldRenderGlassOpticalLayer.value
-        ? getPreparedOpticalBackgroundImage(nextImage)
-        : undefined
-      if (opticalImage) {
-        const preparation = await prepareOpticalWallpaper(opticalImage)
-        opticalRevision = preparation.revision
-        if (!preparation.ready) continue
-      }
-      const imagesReady = await preloadBackgroundRotationImages({
-        displayUrl: isGlassTheme.value ? getPreparedBackgroundImage(nextImage) : nextImage,
-        opticalUrl: opticalImage,
-        preload: preloadImage,
-      })
-      if (!imagesReady) continue
-      if (!allowsBackgroundRotation.value || requestVersion !== backgroundRotationVersion) return
+    if (!(await preloadBackgroundCandidate(nextImage))) continue
+    const imagesReady = await preloadBackgroundRotationImages({
+      displayUrl: isGlassTheme.value ? getPreparedBackgroundImage(nextImage) : nextImage,
+      preload: preloadImage,
+    })
+    if (!imagesReady) continue
+    if (!allowsBackgroundRotation.value || requestVersion !== backgroundRotationVersion) return
 
-      if (opticalImage) {
-        if (!(await requestOpticalWallpaperActivation(nextIndex, opticalRevision))) continue
-      } else {
-        activateBackgroundImage(nextIndex)
-      }
-      scheduleNextBackgroundPreload()
-      return
-    } finally {
-      if (opticalRevision > 0) cancelOpticalWallpaperTransaction(opticalRevision)
-    }
+    activateBackgroundImage(nextIndex)
+    scheduleNextBackgroundPreload()
+    return
   }
 
   if (requestVersion === backgroundRotationVersion && backgroundRecoveryAttemptedVersion !== backgroundLoadVersion) {
@@ -747,7 +658,6 @@ function stopBackgroundRotation() {
   backgroundRotationVersion += 1
   cancelNextBackgroundPreload()
   removeBackgroundTimer('background-rotation')
-  cancelOpticalWallpaperTransaction()
 }
 
 function clearBackgroundRotationGrace() {
@@ -1108,29 +1018,14 @@ onUnmounted(() => {
       <!-- 全局磨砂层 -->
       <div v-if="shouldRenderGlobalBlurLayer" class="global-blur-layer"></div>
     </div>
-    <GlassOpticalLayer
-      v-if="shouldRenderGlassOpticalLayer"
+    <GlassSurfaceDynamics
+      v-if="shouldRenderGlassSurfaceDynamics"
       :appearance="effectiveGlassSettings.glassAppearance"
       :deformation-strength="opticalDeformationStrength"
       :flow-strength="opticalFlowStrength"
       :quality="opticalQuality === 'high' ? 'high' : 'balanced'"
-      :reflection-strength="opticalReflectionStrength"
-      :transparency-strength="opticalTransparencyStrength"
-      :transmission-strength="opticalTransmissionStrength"
       :translation-strength="opticalTranslationStrength"
       :route-key="route.fullPath"
-      :tint-color="globalTheme.current.value.colors.primary"
-      :transition-duration="BACKGROUND_CROSSFADE_DURATION_MS"
-      :transition-started-at="backgroundCrossfadeStartedAt"
-      :wallpaper-url="activeOpticalBackgroundImage"
-      :previous-wallpaper-url="previousOpticalBackgroundImage"
-      :pending-wallpaper-url="pendingOpticalBackgroundImage"
-      :pending-wallpaper-revision="pendingOpticalWallpaperRevision"
-      :activate-wallpaper-revision="activateOpticalWallpaperRevision"
-      @wallpaper-activation-failed="handleOpticalWallpaperActivationFailed"
-      @wallpaper-activated="handleOpticalWallpaperActivated"
-      @wallpaper-preparation-failed="handleOpticalWallpaperPreparationFailed"
-      @wallpaper-prepared="handleOpticalWallpaperPrepared"
     />
     <!-- 页面内容 -->
     <VApp

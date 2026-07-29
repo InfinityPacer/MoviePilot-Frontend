@@ -3,7 +3,7 @@ import FileBrowserView from '@/views/reorganize/FileBrowserView.vue'
 </script>
 
 <template>
-  <div data-glass-optical-mode="static-material">
+  <div>
     <FileBrowserView />
   </div>
 </template>

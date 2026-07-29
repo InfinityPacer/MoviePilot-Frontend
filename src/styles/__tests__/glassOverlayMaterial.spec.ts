@@ -12,12 +12,12 @@ describe('glass overlay material styles', () => {
     expect(styles).toContain('--glass-overlay-saturate: 115%')
     expect(styles).toContain('--glass-overlay-blur: 12px')
     expect(styles).toContain('--glass-overlay-saturate: 120%')
-    expect(styles).toContain('--glass-overlay-blur: min(var(--glass-blur-raised), 36px)')
+    expect(styles).toContain('--glass-overlay-blur: min(var(--glass-native-raised-blur), 36px)')
     expect(styles).toContain('--glass-overlay-saturate: 135%')
     expect(styles).toContain('--glass-overlay-scrim: rgba(3, 7, 18, 30%)')
     expect(styles).toContain('--glass-overlay-scrim: rgba(3, 7, 18, 32%)')
     expect(styles).toContain('--glass-overlay-scrim: rgba(3, 7, 18, 36%)')
-    expect(styles).toContain('calc(0.24 + var(--glass-surface-density, 0.86) * 0.12)')
+    expect(styles).toContain('calc(0.06 + var(--glass-surface-density, 0.86) * 0.12)')
     expect(styles).not.toContain('calc(0.64 + var(--glass-surface-density, 0.86) * 0.16)')
     expect(styles).not.toContain('background: rgba(3, 7, 18, 62%)')
   })
@@ -36,9 +36,9 @@ describe('glass overlay material styles', () => {
   it('keeps the fixed navigation backdrop isolated from route content and its scrollbar', () => {
     const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
 
-    expect(styles).toContain('--glass-fixed-shell-backdrop-filter: blur(min(var(--glass-blur-raised), 60px))')
+    expect(styles).toContain('--glass-fixed-shell-backdrop-filter: blur(min(var(--glass-native-raised-blur), 60px))')
     expect(styles).toMatch(
-      /\.layout-vertical-nav\s*\{[\s\S]*?isolation:\s*isolate;[\s\S]*?backdrop-filter:\s*none;[\s\S]*?&::before\s*\{[\s\S]*?backdrop-filter:\s*var\(--glass-fixed-shell-backdrop-filter\);/,
+      /\.layout-vertical-nav\s*\{[\s\S]*?isolation:\s*isolate;[\s\S]*?backdrop-filter:\s*none;[\s\S]*?&::before\s*\{[\s\S]*?backdrop-filter:\s*var\(--glass-fixed-shell-filter-chain, var\(--glass-fixed-shell-backdrop-filter\)\);/,
     )
     expect(styles).toMatch(/\.layout-vertical-nav \.ps__rail-y\s*\{[\s\S]*?inset-inline-end:\s*0\.5rem !important;/)
   })
@@ -52,16 +52,48 @@ describe('glass overlay material styles', () => {
     )
   })
 
-  it('hands the CSS fallback to an already rendered canvas without a second opacity transition', () => {
+  it('applies surface-local displacement inside the native backdrop filter chain', () => {
     const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
-    const layerRuleStart = styles.indexOf('.glass-optical-layer {')
-    const layerRuleEnd = styles.indexOf('.glass-optical-layer--fixed', layerRuleStart)
-    const layerRule = styles.slice(layerRuleStart, layerRuleEnd)
 
-    expect(layerRuleStart).toBeGreaterThanOrEqual(0)
-    expect(layerRuleEnd).toBeGreaterThan(layerRuleStart)
-    expect(layerRule).toContain('opacity: 0')
-    expect(layerRule).not.toMatch(/transition\s*:/)
-    expect(styles).toMatch(/\[data-glass-renderer-state='ready'\]\s*\.glass-optical-layer\s*\{\s*opacity:\s*1;/)
+    expect(styles).toContain('--glass-surface-backdrop-filter: brightness(var(--glass-transmission-brightness))')
+    expect(styles).toMatch(
+      /\[data-glass-surface-dynamics\]\s*\{[\s\S]*?--glass-surface-filter-chain:\s*var\(--glass-surface-displacement-filter, brightness\(1\)\)\s*var\(--glass-surface-backdrop-filter\);/,
+    )
+    expect(styles).toContain('--glass-overlay-filter-chain: var(--glass-surface-displacement-filter, brightness(1))')
+    expect(styles).toContain('--glass-dashboard-filter-chain: var(--glass-surface-displacement-filter, brightness(1))')
+    expect(styles).toMatch(
+      /\.login-card__surface\s*\{[\s\S]*?-webkit-backdrop-filter:\s*var\(--glass-surface-filter-chain/,
+    )
+    expect(styles).toMatch(
+      /:where\([\s\S]*?\.v-card[\s\S]*?\)\s*\{[\s\S]*?-webkit-backdrop-filter:\s*var\(--glass-surface-filter-chain/,
+    )
+    expect(styles).not.toContain('[data-glass-surface-dynamics]::after')
+    expect(styles).not.toContain('--glass-dynamics-x')
+    expect(styles).not.toContain('--glass-dynamics-tail-x')
+    expect(styles).not.toContain('conic-gradient(')
+    expect(styles).not.toContain('.glass-optical-layer')
+    expect(styles).not.toContain('data-glass-renderer-state')
+  })
+
+  it('keeps controls and nested containers out of the top-level backdrop sampling chain', () => {
+    const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
+
+    expect(styles).toContain('--glass-control-prominent-backdrop-filter: none')
+    expect(styles).not.toContain('--glass-control-prominent-backdrop-filter: blur(')
+    expect(styles).toMatch(
+      /\[data-glass-surface-dynamics\][\s\S]*?:where\([\s\S]*?\.search-input-wrapper,[\s\S]*?\.native-login-field,[\s\S]*?\.v-field,[\s\S]*?\.v-btn,[\s\S]*?\)\s*\{[\s\S]*?backdrop-filter:\s*none !important;/,
+    )
+  })
+
+  it('keeps frosted optical qualities distinct from the standard native material', () => {
+    const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
+
+    expect(styles).toMatch(
+      /\[data-glass-appearance='frosted'\]\[data-glass-dynamics-quality='balanced'\][\s\S]*?--glass-native-surface-blur:\s*min\(var\(--glass-blur-surface\), 16px\);/,
+    )
+    expect(styles).toMatch(
+      /\[data-glass-appearance='frosted'\]\[data-glass-dynamics-quality='high'\][\s\S]*?--glass-native-surface-blur:\s*min\(var\(--glass-blur-surface\), 10px\);/,
+    )
+    expect(styles).toContain('--glass-blur-surface: 40px')
   })
 })

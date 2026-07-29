@@ -5,9 +5,9 @@ export type LoginVisualProfile = 'classic' | 'glass' | 'transparent'
 export interface LoginGlassPreference {
   /** 用户选择的玻璃材质。 */
   appearance: GlassAppearance
-  /** 用户保存的局部非均匀形变强度。 */
+  /** 用户保存的真实背板位移强度。 */
   deformationStrength: number
-  /** 用户保存的轨迹、尾波与惯性强度。 */
+  /** 用户保存的位移场衰减与惯性强度。 */
   flowStrength: number
   /** 用户选择的方案；登录页保持方案身份但只强制高质量能力。 */
   preset: GlassOpticalPreset
@@ -15,7 +15,7 @@ export interface LoginGlassPreference {
   reflectionStrength: number
   /** 用户保存的玻璃内部透射亮度。 */
   transmissionStrength: number
-  /** 用户保存的统一采样平移强度。 */
+  /** 用户保存的位移噪声推进距离。 */
   translationStrength: number
   /** 用户保存的壁纸可见度与材质遮罩强度。 */
   transparencyStrength: number
@@ -65,7 +65,7 @@ export function prepareLoginBackgroundLayer(layers: LoginBackgroundLayer[], url:
   return layers.map(layer => (layer.role === 'standby' ? { ...layer, url } : { ...layer }))
 }
 
-/** 在壁纸与纹理均就绪后原子交换两个槽位的职责。 */
+/** 在下一张 DOM 壁纸就绪后原子交换两个槽位的职责。 */
 export function activateLoginBackgroundLayer(layers: LoginBackgroundLayer[]): LoginBackgroundLayer[] {
   if (!layers.some(layer => layer.role === 'standby' && layer.url)) return layers
 

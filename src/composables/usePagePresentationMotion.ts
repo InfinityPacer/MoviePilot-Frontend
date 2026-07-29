@@ -1,4 +1,4 @@
-import { readonly, ref, type Ref } from 'vue'
+import { readonly, ref } from 'vue'
 
 export const PAGE_PRESENTATION_MOTION_DURATION_MS = 180
 export const PAGE_PRESENTATION_MOTION_START_OPACITY = 0.88
@@ -6,21 +6,10 @@ export const PAGE_PRESENTATION_MOTION_START_TRANSLATE_Y = 4
 export const PAGE_PRESENTATION_LAYOUT_STABLE_MS = 120
 export const PAGE_PRESENTATION_LAYOUT_HOLD_MAX_MS = 480
 
-/** renderer 只读取同一帧已经提交到 DOM 的页面呈现状态。 */
-export interface PagePresentationMotionReader {
-  /** 页面是否处于共享呈现事务中。 */
-  active: Readonly<Ref<boolean>>
-  /** 当前页面材质与 DOM 共同使用的透明度。 */
-  opacity: Readonly<Ref<number>>
-  /** 每次 DOM motion 样式提交后递增，renderer 据此在同一帧刷新表面。 */
-  revision: Readonly<Ref<number>>
-}
-
 const active = ref(false)
 const epoch = ref(0)
 const opacity = ref(1)
 const progress = ref(1)
-const revision = ref(0)
 const routeKey = ref('')
 const translateY = ref(0)
 let animationFrame: number | null = null
@@ -61,7 +50,7 @@ function clearDocumentMotionState() {
   root.style.removeProperty('--mp-page-motion-translate-y')
 }
 
-/** 先提交 DOM 样式，再发布 revision，保证 renderer 读取到同一帧的真实矩形。 */
+/** 将页面入场状态原子写入根节点，避免透明度与位移跨帧更新。 */
 function applyMotionFrame(nextProgress: number) {
   const root = document.documentElement
   const nextOpacity =
@@ -74,10 +63,9 @@ function applyMotionFrame(nextProgress: number) {
   opacity.value = nextOpacity
   progress.value = nextProgress
   translateY.value = nextTranslateY
-  revision.value += 1
 }
 
-/** 布局门关闭时 DOM 与 renderer 都不暴露尚未稳定的页面几何。 */
+/** 布局门关闭时不暴露尚未稳定的页面几何。 */
 function applyLayoutHoldFrame() {
   const root = document.documentElement
 
@@ -87,7 +75,6 @@ function applyLayoutHoldFrame() {
   opacity.value = 0
   progress.value = 0
   translateY.value = PAGE_PRESENTATION_MOTION_START_TRANSLATE_Y
-  revision.value += 1
 }
 
 function getLayoutSignature(root: HTMLElement) {
@@ -133,7 +120,7 @@ function settleMotion() {
 }
 
 function cancel() {
-  const needsRendererCommit =
+  const needsCancellation =
     active.value ||
     opacity.value !== 1 ||
     translateY.value !== 0 ||
@@ -141,9 +128,8 @@ function cancel() {
 
   if (animationFrame !== null) window.cancelAnimationFrame(animationFrame)
   animationFrame = null
-  if (needsRendererCommit) epoch.value += 1
+  if (needsCancellation) epoch.value += 1
   settleMotion()
-  if (needsRendererCommit) revision.value += 1
 }
 
 function renderFrame(timestamp: number, motionEpoch: number) {
@@ -179,13 +165,11 @@ function start(nextRouteKey: string, layoutRoot?: HTMLElement | null) {
   // 启动屏已完整遮罩页面；在其背后再等待布局稳定会把一次启动拆成两次可见揭示。
   if (document.documentElement.dataset.launchLoading === 'true' && document.getElementById('loading-bg')) {
     settleMotion()
-    revision.value += 1
     return true
   }
 
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
     settleMotion()
-    revision.value += 1
     return true
   }
 
@@ -206,22 +190,14 @@ function start(nextRouteKey: string, layoutRoot?: HTMLElement | null) {
   return true
 }
 
-const reader: PagePresentationMotionReader = {
-  active: readonly(active),
-  opacity: readonly(opacity),
-  revision: readonly(revision),
-}
-
-/** 提供默认布局与 glass renderer 共享的短时页面呈现事务。 */
+/** 提供玻璃主题默认布局使用的短时页面呈现事务。 */
 export function usePagePresentationMotion() {
   return {
     active: readonly(active),
     cancel,
     epoch: readonly(epoch),
-    opacity: reader.opacity,
+    opacity: readonly(opacity),
     progress: readonly(progress),
-    reader,
-    revision: reader.revision,
     routeKey: readonly(routeKey),
     start,
     translateY: readonly(translateY),

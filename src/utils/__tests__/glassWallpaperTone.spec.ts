@@ -2,7 +2,6 @@ import {
   DEFAULT_GLASS_WALLPAPER_TONE_PROFILE,
   getGlassWallpaperToneProfile,
   loadGlassWallpaperTone,
-  takeGlassWallpaperDecodedSource,
 } from '@/utils/glassWallpaperTone'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -43,7 +42,7 @@ describe('glass wallpaper tone profile', () => {
     expect(getGlassWallpaperToneProfile([Number.NaN])).toEqual(DEFAULT_GLASS_WALLPAPER_TONE_PROFILE)
   })
 
-  it('reuses the successful CORS image decode for readiness and tone analysis', async () => {
+  it('uses one successful CORS image decode for readiness and tone analysis', async () => {
     const pixels = new Uint8ClampedArray(64 * 64 * 4)
     for (let offset = 0; offset < pixels.length; offset += 4) {
       pixels[offset] = 128
@@ -81,8 +80,6 @@ describe('glass wallpaper tone profile', () => {
     expect(result.profile.medianLuminance).toBeCloseTo(128 / 255)
     expect(imageCount).toBe(1)
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(takeGlassWallpaperDecodedSource('https://image.example/success.jpg')?.profile).toEqual(result.profile)
-    expect(takeGlassWallpaperDecodedSource('https://image.example/success.jpg')).toBeUndefined()
   })
 
   it('repairs a polluted browser cache before retrying the CORS image decode', async () => {

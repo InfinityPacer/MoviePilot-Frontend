@@ -9,24 +9,15 @@ export interface GlassWallpaperToneProfile {
   medianLuminance: number
 }
 
-/** 一次图片解码同时给出 WebGL 可读性与壁纸曝光分析结果。 */
+/** 一次匿名图片解码同时给出像素可读性与壁纸曝光分析结果。 */
 export interface GlassWallpaperToneLoadResult {
-  /** 当前 URL 已按匿名 CORS 模式完成解码，可安全交给 WebGL。 */
+  /** 当前 URL 已按匿名 CORS 模式完成解码，可用于亮度分析和同源 DOM 显示。 */
   corsReady: boolean
-  /** 与 DOM 背景和 renderer 共用的有限曝光 profile。 */
-  profile: GlassWallpaperToneProfile
-}
-
-/** 交给 renderer 消费的一次性已解码壁纸源。 */
-export interface GlassWallpaperDecodedSource {
-  /** 已完成匿名 CORS 解码的图片。 */
-  image: HTMLImageElement
-  /** 与该图片同一次解码得到的曝光 profile。 */
+  /** DOM 背景使用的有限曝光 profile。 */
   profile: GlassWallpaperToneProfile
 }
 
 const ANALYSIS_MAX_EDGE = 64
-const DECODED_SOURCE_CACHE_LIMIT = 3
 const PROFILE_CACHE_LIMIT = 32
 const PROFILE_LOAD_TIMEOUT_MS = 3000
 const EXPOSURE_MIN = 0.88
@@ -41,7 +32,6 @@ export const DEFAULT_GLASS_WALLPAPER_TONE_PROFILE: GlassWallpaperToneProfile = {
 }
 
 const profileCache = new Map<string, Promise<GlassWallpaperToneLoadResult>>()
-const decodedSourceCache = new Map<string, GlassWallpaperDecodedSource>()
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -77,7 +67,7 @@ export function getGlassWallpaperToneProfile(luminances: number[]): GlassWallpap
   }
 }
 
-/** 从已解码图片生成与 renderer、DOM 背景层共用的稳健亮度 profile。 */
+/** 从已解码图片生成 DOM 背景层使用的稳健亮度 profile。 */
 export function analyzeGlassWallpaperTone(image: CanvasImageSource, width: number, height: number) {
   if (typeof document === 'undefined' || width <= 0 || height <= 0) {
     return { ...DEFAULT_GLASS_WALLPAPER_TONE_PROFILE }
@@ -116,28 +106,6 @@ function rememberProfile(url: string, profile: Promise<GlassWallpaperToneLoadRes
   return profile
 }
 
-/** 只保留 current/previous/prepared 三个候选，避免完整解码图片变成长期内存缓存。 */
-function rememberDecodedSource(url: string, source: GlassWallpaperDecodedSource) {
-  decodedSourceCache.delete(url)
-  decodedSourceCache.set(url, source)
-
-  while (decodedSourceCache.size > DECODED_SOURCE_CACHE_LIMIT) {
-    const oldestKey = decodedSourceCache.keys().next().value
-    if (oldestKey) decodedSourceCache.delete(oldestKey)
-  }
-}
-
-/**
- * renderer 取得已完成 tone 分析的图片后立即移出缓存。
- * fixed 与 scroll context 后续通过 renderer 自身的 CPU source cache 共享缩放结果。
- */
-export function takeGlassWallpaperDecodedSource(url: string): GlassWallpaperDecodedSource | undefined {
-  const source = decodedSourceCache.get(url)
-  if (source) decodedSourceCache.delete(url)
-
-  return source
-}
-
 function loadCorsReadableToneProfile(url: string): Promise<GlassWallpaperToneLoadResult> {
   return new Promise(resolve => {
     const image = new Image()
@@ -161,7 +129,6 @@ function loadCorsReadableToneProfile(url: string): Promise<GlassWallpaperToneLoa
         image.naturalWidth || image.width,
         image.naturalHeight || image.height,
       )
-      rememberDecodedSource(url, { image, profile })
       finish({
         corsReady: true,
         profile,
@@ -177,7 +144,7 @@ function loadCorsReadableToneProfile(url: string): Promise<GlassWallpaperToneLoa
 }
 
 /**
- * 以一次匿名图片解码同时完成 WebGL 可读性检查和曝光分析。
+ * 以一次匿名图片解码同时完成像素可读性检查和曝光分析。
  * 只有旧的非 CORS 缓存污染读取时才强制重新验证，再进行一次解码。
  */
 export function loadGlassWallpaperTone(url: string): Promise<GlassWallpaperToneLoadResult> {

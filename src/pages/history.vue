@@ -3,7 +3,7 @@ import TransferHistoryView from '@/views/reorganize/TransferHistoryView.vue'
 </script>
 
 <template>
-  <div data-glass-optical-mode="static-material">
+  <div>
     <TransferHistoryView />
   </div>
 </template>

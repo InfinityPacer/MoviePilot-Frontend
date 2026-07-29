@@ -79,21 +79,21 @@ export type ThemeCustomizerTheme = 'auto' | 'dark' | 'glass' | 'light' | 'purple
 export interface ThemeCustomizerSettings {
   /** 玻璃主题的材质语义，与渲染质量保持独立。 */
   glassAppearance: ThemeCustomizerGlassAppearance
-  /** 局部非均匀折射与内容弯曲强度，范围 0 到 100。 */
+  /** 原生背板的局部位移幅度与噪声空间尺度，范围 0 到 100。 */
   glassDeformationStrength: number
-  /** 轨迹、尾波、惯性与收敛强度，范围 0 到 100。 */
+  /** 位移场能量、速度衰减与惯性强度，范围 0 到 100。 */
   glassFlowStrength: number
   /** 当前玻璃方案；具体参数独立保存，滑杆调整不会丢失方案归属。 */
   glassPreset: GlassOpticalPreset
   /** 按材质、质量与方案保存的六参数覆盖；缺失组合使用预设矩阵。 */
   glassPresetOverrides: GlassOpticalPresetOverrides
-  /** 玻璃主题的渲染质量，决定使用标准 CSS 或共享光学渲染器。 */
+  /** 玻璃主题的呈现质量，决定使用静态材质或 surface-local 动态层。 */
   glassQuality: ThemeCustomizerGlassQuality
-  /** 玻璃亮边、镜面高光与焦散光照强度，范围 0 到 100。 */
+  /** 玻璃亮边与静态镜面响应强度，范围 0 到 100。 */
   glassReflectionStrength: number
-  /** 玻璃内部壁纸采样的亮度与暗部展开强度，范围 0 到 100。 */
+  /** 原生背板对真实壁纸的亮度响应，范围 0 到 100。 */
   glassTransmissionStrength: number
-  /** 共享壁纸在表面内的统一采样平移强度，范围 0 到 100。 */
+  /** 位移噪声沿输入方向的推进距离，范围 0 到 100。 */
   glassTranslationStrength: number
   /** 玻璃材质释放真实壁纸的程度，范围 0 到 100。 */
   glassTransparencyStrength: number
@@ -469,9 +469,6 @@ export function applyThemeCustomizerRootSettings(
   const materialResponse = getGlassMaterialResponse(settings.glassAppearance, settings.glassTransparencyStrength)
   const frostBlur = getGlassCssFrostBlur(settings.glassTransparencyStrength)
   const applyGlassResponse = (element: HTMLElement) => {
-    element.style.setProperty('--glass-background-visibility', String(materialResponse.backgroundVisibility))
-    element.style.setProperty('--glass-frost-blur-scale', String(materialResponse.frostBlurScale))
-    element.style.setProperty('--glass-frost-detail-level', String(materialResponse.frostDetailLevel))
     element.style.setProperty('--glass-surface-density', String(materialResponse.surfaceDensity))
     element.style.setProperty('--glass-tint-density', String(materialResponse.tintDensity))
     element.style.setProperty('--glass-blur-surface', `${frostBlur.surface}px`)
@@ -815,12 +812,12 @@ export function useThemeCustomizer() {
     return updateGlassPresetOverride({ reflection: normalizeGlassOpticalStrength(glassReflectionStrength) })
   }
 
-  /** 更新玻璃内部壁纸采样的透射亮度。 */
+  /** 更新原生背板对真实壁纸的透射亮度。 */
   function setGlassTransmissionStrength(glassTransmissionStrength: number) {
     return updateGlassPresetOverride({ transmission: normalizeGlassOpticalStrength(glassTransmissionStrength) })
   }
 
-  /** 更新玻璃统一采样平移强度。 */
+  /** 更新位移噪声沿输入方向的推进距离。 */
   function setGlassTranslationStrength(glassTranslationStrength: number) {
     return updateGlassPresetOverride({ translation: normalizeGlassOpticalStrength(glassTranslationStrength) })
   }

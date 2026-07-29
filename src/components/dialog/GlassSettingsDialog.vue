@@ -19,6 +19,7 @@ import {
   type GlassOpticalPreset,
   type GlassOpticalPresetOverrides,
 } from '@/utils/glassOptics'
+import { supportsGlassBackdropDisplacement } from '@/utils/glassDisplacement'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 
@@ -50,7 +51,8 @@ const draftTransmissionStrength = ref(settings.value.glassTransmissionStrength)
 const draftTranslationStrength = ref(settings.value.glassTranslationStrength)
 const draftTransparencyStrength = ref(settings.value.glassTransparencyStrength)
 const isSaving = ref(false)
-const usesRealtimeOptics = computed(() => draftQuality.value !== 'css')
+const supportsDynamicDisplacement = supportsGlassBackdropDisplacement()
+const usesRealtimeOptics = computed(() => supportsDynamicDisplacement && draftQuality.value !== 'css')
 const showsDynamicTuning = computed(() => usesRealtimeOptics.value)
 const availablePresets = computed(() => getAvailableGlassOpticalPresets(draftQuality.value))
 const activePreset = computed<GlassOpticalPreset>(() =>
@@ -105,7 +107,12 @@ const qualityOptions: Array<{
   { hint: 'theme.glassQualityBalancedHint', label: 'theme.glassQualityBalanced', value: 'balanced' },
   { hint: 'theme.glassQualityHighHint', label: 'theme.glassQualityHigh', value: 'high' },
 ]
-const qualityHint = computed(() => qualityOptions.find(option => option.value === draftQuality.value)?.hint ?? '')
+const qualityHint = computed(() => {
+  if (!supportsDynamicDisplacement && draftQuality.value !== 'css')
+    return 'theme.glassBackdropDisplacementUnavailableHint'
+
+  return qualityOptions.find(option => option.value === draftQuality.value)?.hint ?? ''
+})
 const presetOptions: Array<{ label: string; value: GlassOpticalPreset }> = [
   { label: 'theme.glassPresetNatural', value: 'natural' },
   { label: 'theme.glassPresetGlide', value: 'glide' },
@@ -190,25 +197,25 @@ function updateDraftPresetOverride() {
   previewDraftParameters()
 }
 
-/** 将采样平移限制为 renderer 支持的稳定范围。 */
+/** 将位移噪声推进距离限制为表面内合成支持的稳定范围。 */
 function updateTranslationStrength(value: unknown) {
   draftTranslationStrength.value = normalizeGlassOpticalStrength(Array.isArray(value) ? value[0] : value)
   updateDraftPresetOverride()
 }
 
-/** 将局部形变限制为质量档软上限所消费的用户范围。 */
+/** 将真实背板位移限制为质量档消费的稳定范围。 */
 function updateDeformationStrength(value: unknown) {
   draftDeformationStrength.value = normalizeGlassOpticalStrength(Array.isArray(value) ? value[0] : value)
   updateDraftPresetOverride()
 }
 
-/** 将尾波、惯性与收敛输入限制为 renderer 的稳定范围。 */
+/** 将位移场速度衰减与惯性输入限制为稳定范围。 */
 function updateFlowStrength(value: unknown) {
   draftFlowStrength.value = normalizeGlassOpticalStrength(Array.isArray(value) ? value[0] : value)
   updateDraftPresetOverride()
 }
 
-/** 将滑杆输入限制为 renderer 的稳定范围并即时预览反射亮度。 */
+/** 将滑杆输入限制为材质合同的稳定范围并即时预览反射亮度。 */
 function updateReflectionStrength(value: unknown) {
   draftReflectionStrength.value = normalizeGlassOpticalStrength(Array.isArray(value) ? value[0] : value)
   updateDraftPresetOverride()
@@ -281,7 +288,7 @@ onScopeDispose(cancelGlassPreview)
     scrollable
     :fullscreen="display.smAndDown.value"
   >
-    <VCard>
+    <VCard class="glass-settings-dialog__card">
       <VCardItem>
         <VCardTitle>
           <VIcon icon="mdi-blur-radial" class="me-2" />
@@ -491,6 +498,11 @@ onScopeDispose(cancelGlassPreview)
 </template>
 
 <style scoped lang="scss">
+.glass-settings-dialog__card {
+  // 正文是弹窗唯一滚动所有者；外卡片只负责固定标题和操作区。
+  overflow: hidden !important;
+}
+
 .glass-settings-dialog__body {
   display: grid;
   align-content: start;

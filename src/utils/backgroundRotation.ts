@@ -1,6 +1,6 @@
 import type { AppActivityState } from '@/utils/appActivityLifecycle'
 
-/** 壁纸在窗口失焦后继续轮换的最长时间，交互 renderer 仍由应用生命周期独立暂停。 */
+/** 壁纸在窗口失焦后继续轮换的最长时间，表面动态仍由应用生命周期独立暂停。 */
 export const BACKGROUND_ROTATION_GRACE_MS = 60_000
 
 type RandomSource = () => number
@@ -36,8 +36,6 @@ export function createBackgroundCandidateOrderResolver(random: RandomSource = Ma
 interface BackgroundRotationImagePreloadOptions {
   /** 外层背景实际显示的壁纸地址。 */
   displayUrl: string
-  /** 实时光学 renderer 确实会消费时才提供的同源纹理地址。 */
-  opticalUrl?: string
   /** 执行单张图片预加载并返回可用状态。 */
   preload: (url: string) => Promise<boolean>
 }
@@ -63,15 +61,7 @@ export async function findFirstAvailableBackground(options: FirstAvailableBackgr
   return null
 }
 
-/**
- * 预加载一次轮换真正依赖的壁纸；未启用光学采样时不让派生纹理阻断外层背景切换。
- */
+/** 预加载一次轮换真正依赖的 DOM 壁纸。 */
 export async function preloadBackgroundRotationImages(options: BackgroundRotationImagePreloadOptions) {
-  const urls =
-    options.opticalUrl && options.opticalUrl !== options.displayUrl
-      ? [options.displayUrl, options.opticalUrl]
-      : [options.displayUrl]
-  const results = await Promise.all(urls.map(url => options.preload(url)))
-
-  return results.every(Boolean)
+  return options.preload(options.displayUrl)
 }

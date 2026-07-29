@@ -45,12 +45,9 @@ describe('page presentation motion', () => {
     const launchScreen = document.createElement('div')
     launchScreen.id = 'loading-bg'
     document.body.append(launchScreen)
-    const initialRevision = motion.revision.value
-
     expect(motion.start('/dashboard')).toBe(true)
     expect(motion.active.value).toBe(false)
     expect(motion.opacity.value).toBe(1)
-    expect(motion.revision.value).toBe(initialRevision + 1)
     expect(callbacks.size).toBe(0)
     expect(document.documentElement.dataset.pagePresentationMotion).toBeUndefined()
   })
@@ -96,13 +93,10 @@ describe('page presentation motion', () => {
   })
 
   it('uses one eased timeline for the initial, intermediate, and settled states', () => {
-    const initialRevision = motion.revision.value
-
     expect(motion.start('/dashboard')).toBe(true)
     expect(motion.active.value).toBe(true)
     expect(motion.opacity.value).toBe(PAGE_PRESENTATION_MOTION_START_OPACITY)
     expect(motion.translateY.value).toBe(PAGE_PRESENTATION_MOTION_START_TRANSLATE_Y)
-    expect(motion.revision.value).toBe(initialRevision + 1)
     expect(document.documentElement.dataset.pagePresentationMotion).toBe('active')
 
     const [firstFrame] = callbacks.values()
@@ -128,30 +122,25 @@ describe('page presentation motion', () => {
     const [staleFrame] = callbacks.values()
 
     motion.start('/second')
-    const currentRevision = motion.revision.value
     const currentFrame = [...callbacks.values()].at(-1)!
     staleFrame(1016)
 
     expect(motion.routeKey.value).toBe('/second')
-    expect(motion.revision.value).toBe(currentRevision)
     expect([...callbacks.values()]).toContain(currentFrame)
 
     currentFrame(1000 + PAGE_PRESENTATION_MOTION_DURATION_MS)
     expect(motion.opacity.value).toBe(1)
   })
 
-  it('publishes a final renderer revision when an active motion is cancelled', () => {
+  it('clears the document state when an active motion is cancelled', () => {
     motion.start('/dashboard')
     const [frame] = callbacks.values()
     frame(1040)
-    const activeRevision = motion.revision.value
-
     motion.cancel()
 
     expect(motion.active.value).toBe(false)
     expect(motion.opacity.value).toBe(1)
     expect(motion.translateY.value).toBe(0)
-    expect(motion.revision.value).toBe(activeRevision + 1)
     expect(document.documentElement.dataset.pagePresentationMotion).toBeUndefined()
   })
 
@@ -160,12 +149,9 @@ describe('page presentation motion', () => {
       ...window.matchMedia(''),
       matches: true,
     })
-    const initialRevision = motion.revision.value
-
     expect(motion.start('/dashboard')).toBe(true)
     expect(motion.active.value).toBe(false)
     expect(motion.opacity.value).toBe(1)
-    expect(motion.revision.value).toBe(initialRevision + 1)
     expect(callbacks.size).toBe(0)
   })
 

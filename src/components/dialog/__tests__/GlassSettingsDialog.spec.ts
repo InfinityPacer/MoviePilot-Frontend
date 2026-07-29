@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   cancelGlassPreview: vi.fn(),
   commitGlassPreview: vi.fn(),
   previewGlassSettings: vi.fn(),
+  supportsDisplacement: true,
   settings: {
     value: {
       glassAppearance: 'clear',
@@ -37,6 +38,10 @@ const mocks = vi.hoisted(() => ({
       glassTransparencyStrength: 50,
     },
   },
+}))
+
+vi.mock('@/utils/glassDisplacement', () => ({
+  supportsGlassBackdropDisplacement: () => mocks.supportsDisplacement,
 }))
 
 vi.mock('@/composables/useThemeCustomizer', () => ({
@@ -61,6 +66,7 @@ describe('GlassSettingsDialog', () => {
     mocks.cancelGlassPreview.mockClear()
     mocks.commitGlassPreview.mockClear()
     mocks.previewGlassSettings.mockClear()
+    mocks.supportsDisplacement = true
     mocks.settings.value.glassAppearance = 'clear'
     mocks.settings.value.glassDeformationStrength = 50
     mocks.settings.value.glassFlowStrength = 50
@@ -93,6 +99,7 @@ describe('GlassSettingsDialog', () => {
     expect(sliders[0].attributes('data-disabled')).toBe('undefined')
     expect(sliders[1].attributes('data-disabled')).toBe('undefined')
     expect(wrapper.find('.dialog-stub').attributes('data-fullscreen')).toBe('true')
+    expect(wrapper.find('.glass-settings-dialog__card').exists()).toBe(true)
     expect(wrapper.find('.glass-settings-dialog__actions').classes()).toContain('justify-center')
     await wrapper.setProps({ modelValue: false })
 
@@ -366,5 +373,27 @@ describe('GlassSettingsDialog', () => {
       'theme.glassDeformationStrength',
       'theme.glassFlowStrength',
     ])
+  })
+
+  it('keeps material controls but hides unsupported dynamic controls on Safari', () => {
+    mocks.supportsDisplacement = false
+    mocks.settings.value.glassQuality = 'high'
+    const wrapper = shallowMount(GlassSettingsDialog, {
+      global: {
+        stubs: {
+          VCard: slotStub,
+          VCardActions: slotStub,
+          VCardText: slotStub,
+          VDialog: dialogStub,
+          VDialogCloseBtn: true,
+          VSlider: sliderStub,
+        },
+      },
+      props: { modelValue: true },
+    })
+
+    expect(wrapper.findAll('.slider-stub')).toHaveLength(3)
+    expect(wrapper.find('.glass-settings-dialog__preset').exists()).toBe(false)
+    expect(wrapper.text()).toContain('theme.glassBackdropDisplacementUnavailableHint')
   })
 })
