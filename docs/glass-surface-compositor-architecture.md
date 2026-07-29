@@ -2,9 +2,11 @@
 
 ## 状态
 
-- 决策：采用原生背景底板与 surface-local 动态前景分层，停止维护 document-sized scroll WebGL 壁纸折射。
+- 决策：采用原生背景底板与 surface-local SVG backdrop 位移，停止维护 document-sized scroll WebGL
+  壁纸折射和独立动态光斑层。
 - 适用范围：`balanced`、`high` 光学档的所有玻璃表面，包括侧边栏、顶栏与滚动内容。
-- 兼容目标：Chrome、Safari、Firefox 的稳定版本；不把实验性 worklet 或单引擎能力作为核心路径。
+- 兼容目标：Chrome 与 Safari 的稳定版本。支持 SVG backdrop filter reference 的浏览器启用真实位移；
+  不支持的 Safari 版本降级为同参数的原生静态背板，不维护第二套伪流体。
 
 ## 问题
 
@@ -27,12 +29,14 @@ frame 中取得当前异步滚动相位并采样已经合成的任意 DOM backdr
 
 ## 决策
 
-所有玻璃表面采用统一的三层表面合同：
+所有玻璃表面采用统一的职责合同；displacement 与 backplate 在物理合成上属于同一条原生
+`backdrop-filter` pipeline：
 
 ```text
 GlassSurface
-├── native backplate
-├── surface-local dynamics
+├── native backdrop pipeline
+│   ├── surface-local displacement
+│   └── blur / saturation / brightness
 └── content
 ```
 
@@ -48,32 +52,51 @@ GlassSurface
 
 该层在滚动开始、滚动结束和静止态之间不切换实现，也不改变材质密度。
 
-### Surface-local dynamics
+### Surface-local displacement
 
-动态层属于表面自身，位于 backplate 之后、content 之前。它只表达不依赖真实 backdrop 像素的：
+动态阶段属于表面自身，作为该表面唯一 `backdrop-filter` 链的首段，在 blur、saturation 与 brightness
+之前对浏览器提供的 Backdrop Root Image 执行 SVG `feDisplacementMap`。它表达：
 
 - pointer / touch flow；
-- 局部高光；
-- 焦散；
-- 边缘受光；
-- 有界尾迹与衰减。
+- 真实背景纹理位移；
+- 有界流动、惯性与衰减。
 
-动态层随 DOM surface 一起由 compositor 移动，不读取 `window.scrollY` 来补偿壁纸坐标。实现可以使用
-surface-local CSS plane 或有上限、可复用的 local canvas 资源，但所有表面必须共享同一动态模型与
-生命周期。不得为每个常驻卡片创建独立 WebGL context。
+每个可见顶层表面只持有一个无像素输出的 SVG filter definition；表面仍由浏览器原生
+`backdrop-filter` 捕获真实壁纸，不由应用解码、上传或计算壁纸坐标。位移、blur 与色彩处理在同一
+filter list 中完成，禁止再叠加子元素 `backdrop-filter`。
+
+Chrome 通过语法探测并由真实浏览器像素回归验证 SVG filter reference。Safari 稳定版在
+`backdrop-filter: url(...)` 的真实位移通过同等像素回归前明确走静态降级，不只依赖可能误报的
+`CSS.supports()`。支持时 `balanced/high` 开放动态参数；不支持时移除 filter reference，直接使用
+原生 blur、saturation、brightness，并在设置界面隐藏动态参数与动态方案。降级路径不使用 CSS 光斑
+模拟折射。
+
+SVG filter definition 是 Chrome 当前的位移应用路径，不代表动态场只能由 SVG primitive 生成。若
+真实浏览器校准证明 `feTurbulence` 无法达到所需流体细节，可引入有明确上限的 surface-attached
+canvas / GPU pool 生成程序化 displacement field，再由同一原生 backdrop pipeline 应用。GPU 资源
+不得读取、缓存或上传真实壁纸，不得根据 `window.scrollY` 重建壁纸坐标，也不得成为另一套完整玻璃
+renderer。
+
+引入 GPU field generator 时必须满足：
+
+- 池大小具有桌面与移动端独立上限，只服务当前交互或少数高价值可见表面；
+- surface 离开活动态后立即归还资源，不为常驻列表卡保留独立 context；
+- context loss、DPR 与尺寸变化由统一恢复路径处理；
+- 动态纹理提交延迟只能影响位移场演化，不能改变原生 backdrop 的壁纸位置、密度或 blur；
+- OffscreenCanvas 只用于程序化场生成，不宣称解决 compositor 同步。
 
 ### Content
 
-文字、图标、图片和交互控件保持在 dynamics 之上。动态层必须 `pointer-events: none`，不得改变
-可访问性树、命中测试或内容对比度合同。
+文字、图标、图片和交互控件不进入 displacement 输入，保持在背板之上。filter registry 不进入
+可访问性树或命中测试，不得改变内容对比度合同。
 
 ## 统一呈现
 
 侧边栏、顶栏、登录卡片和滚动内容不按定位方式选择不同 renderer。所有表面共享：
 
 - 相同的 native backplate 语义；
-- 相同的 pointer、touch、trail、wake 与 flow 模型；
-- 相同的动态层混合顺序；
+- 相同的 pointer、touch、位移、惯性与 flow 模型；
+- 相同的 displacement → blur → tone 顺序；
 - 相同的 reduced motion / transparency 生命周期；
 - 相同的材质参数来源。
 
@@ -86,45 +109,49 @@ renderer、scroll WebGL renderer、真实壁纸纹理准备事务与双 context 
 ### 透明与色调
 
 - native backplate 保持高通透度；
-- dynamics 使用克制的 source-over 作为默认混合；
+- displacement 直接改变真实 backdrop，不叠加独立亮色光斑；
 - 不以提高全局 alpha 补偿缺少真实壁纸折射。
 
 ### 磨砂
 
 - optical `balanced/high` 使用独立于 CSS 标准档的 blur 与 density；
 - 不复用会把高频动态完全抹平的标准档高 blur；
-- edge、specular、caustic 位于 blur 之后；
-- high 与 balanced 的差异来自动态响应和细节，而不是继续增大 blur。
+- 位移位于 blur 之前，壁纸纹理在高通透设置下仍必须可辨；
+- high 与 balanced 的差异来自位移幅度、噪声细节与动态响应，不是继续增大 blur。
 
-`screen` 或 `plus-lighter` 只能作为隔离实验；默认先使用 premultiplied-alpha source-over，避免亮壁纸、
-HDR 输出和高反射设置下截白。
+### 参数合同
+
+- 通透度：唯一控制 surface、raised、overlay 与 fixed 背板的遮罩密度和磨砂半径。
+- 透射亮度：唯一控制 filter chain 的 brightness，不改变遮罩密度。
+- 反射亮度：控制边缘、描边和静态镜面响应，不改变位移幅度。
+- 流动偏移：控制位移噪声沿输入方向的推进距离。
+- 局部形变：控制 `feDisplacementMap` 位移幅度与噪声空间尺度。
+- 流动惯性：控制位移场速度衰减与能量半衰期。
+
+参数必须各自存在可观察、可测试的消费者。标准档或不支持 SVG backdrop reference 的浏览器不显示
+后三项动态参数；任何失去生产消费者的参数和预设应直接删除。
 
 ## Surface 生命周期
 
-1. 只管理 renderer 已认可的顶层 scroll surface；嵌套表面继续折叠。
-2. MutationObserver 只响应候选 surface 的新增、删除和显式模式变化。
+1. 统一管理 fixed、overlay 与 scroll 的顶层 surface；嵌套表面继续折叠。
+2. MutationObserver 只响应候选 surface 的新增、删除；材质档位、能力状态和可见性由各自生命周期更新。
 3. 页面切换、虚拟列表替换和 KeepAlive 恢复时重新同步 surface 集合。
 4. pointer、touchstart、touchmove、touchend 复用唯一 interaction source。
-5. 同一时刻只激活命中 surface；离开后按有界时长衰减。
+5. pointer/touch 只激活命中 surface；scroll 使用低幅统一位移，不生成逐卡光斑。
 6. reduced motion 下关闭尾迹演化，只保留静态边缘响应。
 7. reduced transparency 下移除 dynamics，并由现有 CSS fallback 接管。
 
-若后续引入 canvas pool：
-
-- 池大小必须有明确上限；
-- 仅 hover、focus、drag、touch-active 或少数高价值 surface 占用；
-- 离开活动态立即归还；
-- context loss、尺寸变化和 DPR 变化必须有集中恢复路径；
-- OffscreenCanvas 只作为程序化场生成器，不宣称解决 compositor 同步。
+filter definition 只分配给进入视口的顶层表面，离开视口立即释放。可见表面和滚动激活数量必须有
+桌面与移动上限，避免常驻列表为不可见卡片保留 filter resource。
 
 ## 实施边界
 
 - 新增统一的 surface-local dynamics composable。
-- 在表面上建立 native backplate、dynamics、content 的稳定绘制顺序。
+- 在表面上建立 displacement、native blur/tone、content 的稳定绘制顺序。
 - 把表面发现与输入生命周期从旧 renderer 中提取为独立合同。
 - 删除 `GlassOpticalLayer`、document-sized canvas、wallpaper offset、surface scissor、WebGL 壁纸准备与
   激活事务，以及只服务这些路径的 shader、缓存、状态和测试。
-- 透明、色调、磨砂分别校准 backplate 与 source-over 动态能量。
+- 透明、色调、磨砂分别校准背板密度、blur 与位移幅度。
 - 覆盖 pointer、touch scroll、hover lift、圆角、低梯度壁纸、虚拟列表替换和页面切换。
 - 不保留迁移开关、兼容接口或没有生产消费者的旧实现。
 
@@ -140,11 +167,11 @@ HDR 输出和高反射设置下截白。
 
 ### 合成
 
-- dynamics 不经过 surface 的 backdrop blur。
-- dynamics 不覆盖或降低文字、图标和图片可读性。
+- displacement 在同一 filter list 中先于 surface blur 执行。
+- displacement 不处理或降低文字、图标和图片可读性。
 - 不使用 nested backdrop-filter。
 - 不为普通列表卡创建常驻 WebGL context。
-- scroll surface 不再采样真实壁纸纹理。
+- scroll surface 不再由应用代码采样、上传或补偿真实壁纸纹理坐标。
 
 ### 工程
 
@@ -162,8 +189,11 @@ HDR 输出和高反射设置下截白。
 - fixed viewport canvas 加主线程 rect mask 并宣称精确同步；
 - 滚动时 native、静止时 full WebGL 的模式切换；
 - 常驻 per-card WebGL context；
+- 独立 CSS radial/conic 光斑冒充真实流体；
+- 子伪元素再次执行 backdrop-filter；
+- surface-attached GPU 重新采样、缓存或上传真实壁纸；
 - 用更高 surface alpha、更大 blur 或更亮的后方 shader 掩盖缺失动态；
-- 依赖 PaintWorklet、AnimationWorklet 或 ScrollTimeline 作为三引擎核心路径。
+- 依赖 PaintWorklet、AnimationWorklet 或 ScrollTimeline 作为 Chrome/Safari 核心路径。
 
 ## 依据
 
