@@ -31,12 +31,12 @@ describe('glass material parameters', () => {
     const liquid = getGlassOpticalPresetParameters('frosted', 'high', 'liquid')
 
     expect(natural).toEqual({
-      deformation: 40,
-      flow: 40,
-      reflection: 35,
-      transmission: 54,
-      translation: 40,
-      transparency: 46,
+      deformation: 52,
+      flow: 52,
+      reflection: 42,
+      transmission: 65,
+      translation: 52,
+      transparency: 55,
     })
     expect(glide.translation).toBeGreaterThan(glide.deformation)
     expect(liquid.deformation).toBeGreaterThan(glide.deformation)
@@ -48,42 +48,42 @@ describe('glass material parameters', () => {
   it('keeps every preset dynamic parameter at the approved material calibration', () => {
     const expected = {
       clear: {
-        css: { natural: { deformation: 40, flow: 40, translation: 40 } },
+        css: { natural: { deformation: 52, flow: 52, translation: 52 } },
         balanced: {
-          natural: { deformation: 40, flow: 40, translation: 40 },
-          glide: { deformation: 24, flow: 35, translation: 58 },
-          liquid: { deformation: 56, flow: 61, translation: 45 },
+          natural: { deformation: 52, flow: 52, translation: 52 },
+          glide: { deformation: 31, flow: 46, translation: 75 },
+          liquid: { deformation: 73, flow: 79, translation: 59 },
         },
         high: {
-          natural: { deformation: 40, flow: 40, translation: 40 },
-          glide: { deformation: 26, flow: 37, translation: 59 },
-          liquid: { deformation: 59, flow: 64, translation: 46 },
+          natural: { deformation: 52, flow: 52, translation: 52 },
+          glide: { deformation: 34, flow: 48, translation: 77 },
+          liquid: { deformation: 77, flow: 83, translation: 60 },
         },
       },
       tinted: {
-        css: { natural: { deformation: 40, flow: 40, translation: 40 } },
+        css: { natural: { deformation: 52, flow: 52, translation: 52 } },
         balanced: {
-          natural: { deformation: 42, flow: 40, translation: 40 },
-          glide: { deformation: 26, flow: 35, translation: 56 },
-          liquid: { deformation: 58, flow: 61, translation: 45 },
+          natural: { deformation: 55, flow: 52, translation: 52 },
+          glide: { deformation: 34, flow: 46, translation: 73 },
+          liquid: { deformation: 75, flow: 79, translation: 59 },
         },
         high: {
-          natural: { deformation: 42, flow: 40, translation: 40 },
-          glide: { deformation: 27, flow: 37, translation: 58 },
-          liquid: { deformation: 61, flow: 64, translation: 46 },
+          natural: { deformation: 55, flow: 52, translation: 52 },
+          glide: { deformation: 35, flow: 48, translation: 75 },
+          liquid: { deformation: 79, flow: 83, translation: 60 },
         },
       },
       frosted: {
-        css: { natural: { deformation: 40, flow: 40, translation: 40 } },
+        css: { natural: { deformation: 52, flow: 52, translation: 52 } },
         balanced: {
-          natural: { deformation: 46, flow: 42, translation: 38 },
-          glide: { deformation: 30, flow: 35, translation: 54 },
-          liquid: { deformation: 62, flow: 61, translation: 42 },
+          natural: { deformation: 60, flow: 55, translation: 49 },
+          glide: { deformation: 39, flow: 46, translation: 70 },
+          liquid: { deformation: 81, flow: 79, translation: 55 },
         },
         high: {
-          natural: { deformation: 48, flow: 42, translation: 38 },
-          glide: { deformation: 32, flow: 37, translation: 56 },
-          liquid: { deformation: 66, flow: 64, translation: 43 },
+          natural: { deformation: 62, flow: 55, translation: 49 },
+          glide: { deformation: 42, flow: 48, translation: 73 },
+          liquid: { deformation: 86, flow: 83, translation: 56 },
         },
       },
     } as const
@@ -124,29 +124,29 @@ describe('glass material parameters', () => {
     )
   })
 
-  it('uses the approved transparency and transmission matrix for all effective presets', () => {
+  it('uses the approved material parameter matrix for all effective presets', () => {
     const expected = {
       clear: {
-        css: { natural: [48, 56] },
-        balanced: { natural: [46, 54], glide: [56, 58], liquid: [51, 51] },
-        high: { natural: [45, 53], glide: [54, 56], liquid: [50, 50] },
+        css: { natural: [58, 67, 42] },
+        balanced: { natural: [55, 65, 42], glide: [67, 70, 35], liquid: [61, 61, 43] },
+        high: { natural: [54, 64, 38], glide: [65, 67, 34], liquid: [60, 60, 42] },
       },
       tinted: {
-        css: { natural: [34, 54] },
-        balanced: { natural: [32, 56], glide: [40, 61], liquid: [36, 53] },
-        high: { natural: [30, 54], glide: [38, 59], liquid: [34, 51] },
+        css: { natural: [41, 65, 46] },
+        balanced: { natural: [38, 67, 46], glide: [48, 73, 41], liquid: [43, 64, 47] },
+        high: { natural: [36, 65, 42], glide: [46, 71, 38], liquid: [41, 61, 46] },
       },
       frosted: {
-        css: { natural: [31, 50] },
-        balanced: { natural: [29, 52], glide: [40, 56], liquid: [34, 49] },
-        high: { natural: [27, 50], glide: [38, 54], liquid: [32, 47] },
+        css: { natural: [37, 60, 37] },
+        balanced: { natural: [35, 62, 37], glide: [48, 67, 32], liquid: [41, 59, 38] },
+        high: { natural: [32, 60, 35], glide: [46, 65, 30], liquid: [38, 56, 37] },
       },
     } as const
 
     for (const [appearance, qualities] of Object.entries(expected)) {
       for (const [quality, presets] of Object.entries(qualities)) {
         for (const [preset, values] of Object.entries(presets)) {
-          const [transparency, transmission] = values as readonly [number, number]
+          const [transparency, transmission, reflection] = values as readonly [number, number, number]
 
           expect(
             getGlassOpticalPresetParameters(
@@ -154,7 +154,7 @@ describe('glass material parameters', () => {
               quality as 'balanced' | 'css' | 'high',
               preset as 'glide' | 'liquid' | 'natural',
             ),
-          ).toMatchObject({ transmission, transparency })
+          ).toMatchObject({ reflection, transmission, transparency })
         }
       }
     }
@@ -195,6 +195,6 @@ describe('glass material parameters', () => {
     const first = getGlassOpticalPresetParameters('tinted', 'high', 'glide')
     first.translation = 0
 
-    expect(getGlassOpticalPresetParameters('tinted', 'high', 'glide').translation).toBe(58)
+    expect(getGlassOpticalPresetParameters('tinted', 'high', 'glide').translation).toBe(75)
   })
 })

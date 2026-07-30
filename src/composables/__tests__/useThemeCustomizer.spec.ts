@@ -46,15 +46,15 @@ describe('useThemeCustomizer glass settings', () => {
     const settings = readThemeCustomizerSettings()
 
     expect(settings.glassAppearance).toBe('clear')
-    expect(settings.glassDeformationStrength).toBe(40)
-    expect(settings.glassFlowStrength).toBe(40)
+    expect(settings.glassDeformationStrength).toBe(52)
+    expect(settings.glassFlowStrength).toBe(52)
     expect(settings.glassPreset).toBe('natural')
     expect(settings.glassPresetOverrides).toEqual({})
     expect(settings.glassQuality).toBe('balanced')
-    expect(settings.glassReflectionStrength).toBe(35)
-    expect(settings.glassTransmissionStrength).toBe(54)
-    expect(settings.glassTranslationStrength).toBe(40)
-    expect(settings.glassTransparencyStrength).toBe(46)
+    expect(settings.glassReflectionStrength).toBe(42)
+    expect(settings.glassTransmissionStrength).toBe(65)
+    expect(settings.glassTranslationStrength).toBe(52)
+    expect(settings.glassTransparencyStrength).toBe(55)
   })
 
   it('recognizes matrix-derived reset settings as the default state', async () => {
@@ -77,15 +77,15 @@ describe('useThemeCustomizer glass settings', () => {
   it('derives app-mode glass reset values from the standard-quality matrix', () => {
     expect(getDefaultGlassCustomizerSettings('css')).toEqual({
       glassAppearance: 'clear',
-      glassDeformationStrength: 40,
-      glassFlowStrength: 40,
+      glassDeformationStrength: 52,
+      glassFlowStrength: 52,
       glassPreset: 'natural',
       glassPresetOverrides: {},
       glassQuality: 'css',
-      glassReflectionStrength: 35,
-      glassTransmissionStrength: 56,
-      glassTranslationStrength: 40,
-      glassTransparencyStrength: 48,
+      glassReflectionStrength: 42,
+      glassTransmissionStrength: 67,
+      glassTranslationStrength: 52,
+      glassTransparencyStrength: 58,
     })
   })
 
@@ -156,12 +156,12 @@ describe('useThemeCustomizer glass settings', () => {
       glassPreset: 'natural',
       glassPresetOverrides: {
         'clear:balanced:natural': {
-          deformation: 40,
-          flow: 40,
-          reflection: 35,
+          deformation: 52,
+          flow: 52,
+          reflection: 42,
           transmission: 50,
-          translation: 40,
-          transparency: 46,
+          translation: 52,
+          transparency: 55,
         },
       },
     })
@@ -180,14 +180,14 @@ describe('useThemeCustomizer glass settings', () => {
     expect(document.documentElement.dataset.glassQuality).toBe('high')
     expect(document.body.dataset.glassAppearance).toBe('tinted')
     expect(document.body.dataset.glassQuality).toBe('high')
-    expect(document.documentElement.style.getPropertyValue('--glass-reflection')).toBe('0.35')
-    expect(document.body.style.getPropertyValue('--glass-reflection')).toBe('0.35')
-    expect(Number(document.documentElement.style.getPropertyValue('--glass-transmission'))).toBeCloseTo(54 / 70)
+    expect(document.documentElement.style.getPropertyValue('--glass-reflection')).toBe('0.42')
+    expect(document.body.style.getPropertyValue('--glass-reflection')).toBe('0.42')
+    expect(Number(document.documentElement.style.getPropertyValue('--glass-transmission'))).toBeCloseTo(65 / 70)
     expect(document.body.style.getPropertyValue('--glass-transmission-brightness')).not.toBe('')
-    expect(Number(document.documentElement.style.getPropertyValue('--glass-frost-blur-scale'))).toBeCloseTo(1.25166)
-    expect(Number(document.body.style.getPropertyValue('--glass-frost-blur-scale'))).toBeCloseTo(1.25166)
-    expect(Number(document.documentElement.style.getPropertyValue('--glass-surface-density'))).toBeCloseTo(0.72972)
-    expect(Number(document.body.style.getPropertyValue('--glass-tint-density'))).toBeCloseTo(0.66215)
+    expect(Number(document.documentElement.style.getPropertyValue('--glass-frost-blur-scale'))).toBeCloseTo(1.18375)
+    expect(Number(document.body.style.getPropertyValue('--glass-frost-blur-scale'))).toBeCloseTo(1.18375)
+    expect(Number(document.documentElement.style.getPropertyValue('--glass-surface-density'))).toBeCloseTo(0.68875)
+    expect(Number(document.body.style.getPropertyValue('--glass-tint-density'))).toBeCloseTo(0.62344)
   })
 
   it('previews glass settings without persisting them', () => {
@@ -352,14 +352,14 @@ describe('useThemeCustomizer glass settings', () => {
 
     expect(readThemeCustomizerSettings()).toMatchObject({
       glassAppearance: 'frosted',
-      glassDeformationStrength: 32,
-      glassFlowStrength: 37,
+      glassDeformationStrength: 42,
+      glassFlowStrength: 48,
       glassPreset: 'glide',
       glassQuality: 'high',
-      glassReflectionStrength: 25,
-      glassTransmissionStrength: 54,
-      glassTranslationStrength: 56,
-      glassTransparencyStrength: 38,
+      glassReflectionStrength: 30,
+      glassTransmissionStrength: 65,
+      glassTranslationStrength: 73,
+      glassTransparencyStrength: 46,
     })
     wrapper.unmount()
   })
@@ -382,20 +382,20 @@ describe('useThemeCustomizer glass settings', () => {
 
     expect(readThemeCustomizerSettings()).toMatchObject({
       glassAppearance: 'tinted',
-      glassDeformationStrength: 42,
+      glassDeformationStrength: 55,
       glassPreset: 'natural',
       glassPresetOverrides: {
         'clear:balanced:natural': {
           deformation: 73,
-          flow: 40,
-          reflection: 35,
-          transmission: 54,
-          translation: 40,
+          flow: 52,
+          reflection: 42,
+          transmission: 65,
+          translation: 52,
           transparency: 27,
         },
       },
       glassQuality: 'high',
-      glassTransparencyStrength: 30,
+      glassTransparencyStrength: 36,
     })
     await setGlassQuality('balanced')
     await setGlassAppearance('clear')
@@ -421,7 +421,7 @@ describe('useThemeCustomizer glass settings', () => {
     expect(readThemeCustomizerSettings()).toMatchObject({
       glassPreset: 'natural',
       glassQuality: 'css',
-      glassTransparencyStrength: 48,
+      glassTransparencyStrength: 58,
     })
 
     await setGlassTransparencyStrength(19)
@@ -429,7 +429,7 @@ describe('useThemeCustomizer glass settings', () => {
     expect(readThemeCustomizerSettings()).toMatchObject({
       glassPreset: 'natural',
       glassQuality: 'balanced',
-      glassTransparencyStrength: 46,
+      glassTransparencyStrength: 55,
     })
     await setGlassQuality('css')
     expect(readThemeCustomizerSettings().glassTransparencyStrength).toBe(19)

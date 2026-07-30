@@ -51,47 +51,47 @@ type GlassOpticalCapabilityPresets = {
 const GLASS_OPTICAL_PRESET_MATRIX: Record<GlassAppearance, GlassOpticalCapabilityPresets> = {
   clear: {
     css: {
-      natural: { deformation: 40, flow: 40, reflection: 35, transmission: 56, translation: 40, transparency: 48 },
+      natural: { deformation: 52, flow: 52, reflection: 42, transmission: 67, translation: 52, transparency: 58 },
     },
     balanced: {
-      natural: { deformation: 40, flow: 40, reflection: 35, transmission: 54, translation: 40, transparency: 46 },
-      glide: { deformation: 24, flow: 35, reflection: 29, transmission: 58, translation: 58, transparency: 56 },
-      liquid: { deformation: 56, flow: 61, reflection: 36, transmission: 51, translation: 45, transparency: 51 },
+      natural: { deformation: 52, flow: 52, reflection: 42, transmission: 65, translation: 52, transparency: 55 },
+      glide: { deformation: 31, flow: 46, reflection: 35, transmission: 70, translation: 75, transparency: 67 },
+      liquid: { deformation: 73, flow: 79, reflection: 43, transmission: 61, translation: 59, transparency: 61 },
     },
     high: {
-      natural: { deformation: 40, flow: 40, reflection: 32, transmission: 53, translation: 40, transparency: 45 },
-      glide: { deformation: 26, flow: 37, reflection: 28, transmission: 56, translation: 59, transparency: 54 },
-      liquid: { deformation: 59, flow: 64, reflection: 35, transmission: 50, translation: 46, transparency: 50 },
+      natural: { deformation: 52, flow: 52, reflection: 38, transmission: 64, translation: 52, transparency: 54 },
+      glide: { deformation: 34, flow: 48, reflection: 34, transmission: 67, translation: 77, transparency: 65 },
+      liquid: { deformation: 77, flow: 83, reflection: 42, transmission: 60, translation: 60, transparency: 60 },
     },
   },
   tinted: {
     css: {
-      natural: { deformation: 40, flow: 40, reflection: 38, transmission: 54, translation: 40, transparency: 34 },
+      natural: { deformation: 52, flow: 52, reflection: 46, transmission: 65, translation: 52, transparency: 41 },
     },
     balanced: {
-      natural: { deformation: 42, flow: 40, reflection: 38, transmission: 56, translation: 40, transparency: 32 },
-      glide: { deformation: 26, flow: 35, reflection: 34, transmission: 61, translation: 56, transparency: 40 },
-      liquid: { deformation: 58, flow: 61, reflection: 39, transmission: 53, translation: 45, transparency: 36 },
+      natural: { deformation: 55, flow: 52, reflection: 46, transmission: 67, translation: 52, transparency: 38 },
+      glide: { deformation: 34, flow: 46, reflection: 41, transmission: 73, translation: 73, transparency: 48 },
+      liquid: { deformation: 75, flow: 79, reflection: 47, transmission: 64, translation: 59, transparency: 43 },
     },
     high: {
-      natural: { deformation: 42, flow: 40, reflection: 35, transmission: 54, translation: 40, transparency: 30 },
-      glide: { deformation: 27, flow: 37, reflection: 32, transmission: 59, translation: 58, transparency: 38 },
-      liquid: { deformation: 61, flow: 64, reflection: 38, transmission: 51, translation: 46, transparency: 34 },
+      natural: { deformation: 55, flow: 52, reflection: 42, transmission: 65, translation: 52, transparency: 36 },
+      glide: { deformation: 35, flow: 48, reflection: 38, transmission: 71, translation: 75, transparency: 46 },
+      liquid: { deformation: 79, flow: 83, reflection: 46, transmission: 61, translation: 60, transparency: 41 },
     },
   },
   frosted: {
     css: {
-      natural: { deformation: 40, flow: 40, reflection: 31, transmission: 50, translation: 40, transparency: 31 },
+      natural: { deformation: 52, flow: 52, reflection: 37, transmission: 60, translation: 52, transparency: 37 },
     },
     balanced: {
-      natural: { deformation: 46, flow: 42, reflection: 31, transmission: 52, translation: 38, transparency: 29 },
-      glide: { deformation: 30, flow: 35, reflection: 27, transmission: 56, translation: 54, transparency: 40 },
-      liquid: { deformation: 62, flow: 61, reflection: 32, transmission: 49, translation: 42, transparency: 34 },
+      natural: { deformation: 60, flow: 55, reflection: 37, transmission: 62, translation: 49, transparency: 35 },
+      glide: { deformation: 39, flow: 46, reflection: 32, transmission: 67, translation: 70, transparency: 48 },
+      liquid: { deformation: 81, flow: 79, reflection: 38, transmission: 59, translation: 55, transparency: 41 },
     },
     high: {
-      natural: { deformation: 48, flow: 42, reflection: 29, transmission: 50, translation: 38, transparency: 27 },
-      glide: { deformation: 32, flow: 37, reflection: 25, transmission: 54, translation: 56, transparency: 38 },
-      liquid: { deformation: 66, flow: 64, reflection: 31, transmission: 47, translation: 43, transparency: 32 },
+      natural: { deformation: 62, flow: 55, reflection: 35, transmission: 60, translation: 49, transparency: 32 },
+      glide: { deformation: 42, flow: 48, reflection: 30, transmission: 65, translation: 73, transparency: 46 },
+      liquid: { deformation: 86, flow: 83, reflection: 37, transmission: 56, translation: 56, transparency: 38 },
     },
   },
 }
