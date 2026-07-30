@@ -29,11 +29,16 @@ const GLASS_SURFACE_SELECTORS = [
 const GLASS_SURFACE_QUERY = GLASS_SURFACE_SELECTORS.join(',')
 const SURFACE_FILTER_PROPERTY = '--glass-surface-displacement-filter'
 const POINTER_ENERGY_FLOOR = 0.2
+const POINTER_ENERGY_SPEED_SCALE = 0.74
 const SCROLL_ENERGY_FLOOR = 0.06
 const SURFACE_VISIBLE_MIN_SIZE = 24
 const MAX_ACTIVE_SURFACES_DESKTOP = 12
 const MAX_ACTIVE_SURFACES_MOBILE = 8
 const MOBILE_LAYOUT_MAX_WIDTH = 960
+const FLOW_OFFSET_BLEED_RATIO = 0.12
+const POINTER_INPUT_FRESHNESS_DURATION = 40
+const POINTER_INFLUENCE_MIN_RADIUS = 306
+const POINTER_INFLUENCE_MAX_RADIUS = 612
 let registrySequence = 0
 
 export type GlassDynamicsState = 'disabled' | 'ready' | 'unsupported'
@@ -57,6 +62,8 @@ interface SurfaceFilterBinding {
   displacement: SVGFEDisplacementMapElement
   element: HTMLElement
   filter: SVGFilterElement
+  maxOffsetX: number
+  maxOffsetY: number
   offset: SVGFEOffsetElement
   turbulence: SVGFETurbulenceElement
 }
@@ -64,6 +71,7 @@ interface SurfaceFilterBinding {
 interface SurfaceMotion {
   binding: SurfaceFilterBinding
   energy: number
+  lastInputAt: number
   lastUpdatedAt: number
   offsetX: number
   offsetY: number
@@ -85,6 +93,24 @@ interface FilterRegistry {
 
 function normalizeUnitStrength(value: unknown) {
   return normalizeGlassOpticalStrength(value) / 100
+}
+
+/** 对指数释放过程做解析积分，避免掉帧时把衰减前速度外推到整个帧间隔。 */
+function advanceRelease(value: number, elapsed: number, halfLife: number) {
+  if (elapsed <= 0) return { integral: 0, value }
+  if (halfLife <= 0) return { integral: 0, value: 0 }
+
+  const decayRate = Math.LN2 / halfLife
+  const decay = Math.exp(-decayRate * elapsed)
+
+  return {
+    integral: (value * (1 - decay)) / decayRate,
+    value: value * decay,
+  }
+}
+
+function clampFlowOffset(value: number, maximum: number) {
+  return Math.max(-maximum, Math.min(maximum, value))
 }
 
 function isVisibleSurface(element: HTMLElement) {
@@ -165,6 +191,7 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
   let mutationFrame: number | null = null
   let mutationObserver: MutationObserver | null = null
   let intersectionObserver: IntersectionObserver | null = null
+  let activeDirectPointerId: number | null = null
   let previousInput: InputPoint | null = null
   let reducedMotionQuery: MediaQueryList | null = null
   let reducedTransparencyQuery: MediaQueryList | null = null
@@ -192,10 +219,16 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
     const frequencyX = 0.018 - deformation * 0.009
     const frequencyY = 0.034 - deformation * 0.015
     binding.turbulence.setAttribute('baseFrequency', `${frequencyX.toFixed(4)} ${frequencyY.toFixed(4)}`)
-    binding.turbulence.setAttribute('numOctaves', toValue(options.quality) === 'high' ? '3' : '2')
+    binding.turbulence.setAttribute('numOctaves', toValue(options.quality) === 'high' ? '4' : '2')
     const motion = motions.get(binding.element)
     const restingEnergy = reducedMotionQuery?.matches ? 0.08 : 0
     binding.displacement.setAttribute('scale', getDisplacementScale(motion?.energy ?? restingEnergy).toFixed(3))
+  }
+
+  function updateFilterGeometry(binding: SurfaceFilterBinding) {
+    const rect = binding.element.getBoundingClientRect()
+    binding.maxOffsetX = Math.max(1, rect.width * FLOW_OFFSET_BLEED_RATIO)
+    binding.maxOffsetY = Math.max(1, rect.height * FLOW_OFFSET_BLEED_RATIO)
   }
 
   function attachFilter(element: HTMLElement) {
@@ -225,9 +258,10 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
     filter.append(turbulence, offset, displacement)
     registry.definitions.append(filter)
 
-    const binding = { displacement, element, filter, offset, turbulence }
+    const binding = { displacement, element, filter, maxOffsetX: 1, maxOffsetY: 1, offset, turbulence }
     filterBindings.set(element, binding)
     element.style.setProperty(SURFACE_FILTER_PROPERTY, `url("#${id}")`)
+    updateFilterGeometry(binding)
     updateFilterParameters(binding)
 
     return binding
@@ -320,9 +354,60 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
     motion.binding.element.style.setProperty('--glass-dynamics-energy', motion.energy.toFixed(4))
   }
 
+  function getPointerInfluenceRadius() {
+    const viewportDiagonal = Math.hypot(window.innerWidth, window.innerHeight)
+
+    return Math.min(POINTER_INFLUENCE_MAX_RADIUS, Math.max(POINTER_INFLUENCE_MIN_RADIUS, viewportDiagonal * 0.357))
+  }
+
+  function getPointerInfluence(element: HTMLElement, point: InputPoint) {
+    const rect = element.getBoundingClientRect()
+    const nearestX = Math.max(rect.left, Math.min(point.clientX, rect.right))
+    const nearestY = Math.max(rect.top, Math.min(point.clientY, rect.bottom))
+    const distance = Math.hypot(point.clientX - nearestX, point.clientY - nearestY)
+    const radius = getPointerInfluenceRadius()
+    const normalized = Math.max(0, 1 - distance / radius)
+
+    return normalized * normalized * (3 - 2 * normalized)
+  }
+
   function ensureAnimation() {
     if (animationFrame !== null || motions.size === 0) return
     animationFrame = requestAnimationFrame(animate)
+  }
+
+  function advanceMotion(motion: SurfaceMotion, timestamp: number, flow: number, translation: number) {
+    const effectiveTimestamp = Math.max(timestamp, motion.lastUpdatedAt)
+    const elapsed = effectiveTimestamp - motion.lastUpdatedAt
+    if (flow <= 0) {
+      motion.energy = 0
+      motion.velocityX = 0
+      motion.velocityY = 0
+      motion.lastUpdatedAt = effectiveTimestamp
+      return
+    }
+
+    const freshElapsed = Math.min(
+      elapsed,
+      Math.max(0, motion.lastInputAt + POINTER_INPUT_FRESHNESS_DURATION - motion.lastUpdatedAt),
+    )
+    const releaseElapsed = elapsed - freshElapsed
+    const energyRelease = advanceRelease(motion.energy, releaseElapsed, flow * 560)
+    const velocityXRelease = advanceRelease(motion.velocityX, releaseElapsed, flow * 350)
+    const velocityYRelease = advanceRelease(motion.velocityY, releaseElapsed, flow * 350)
+    const offsetRate = translation * 0.062
+    motion.offsetX = clampFlowOffset(
+      motion.offsetX + (motion.velocityX * freshElapsed + velocityXRelease.integral) * offsetRate,
+      motion.binding.maxOffsetX,
+    )
+    motion.offsetY = clampFlowOffset(
+      motion.offsetY + (motion.velocityY * freshElapsed + velocityYRelease.integral) * offsetRate,
+      motion.binding.maxOffsetY,
+    )
+    motion.energy = energyRelease.value
+    motion.velocityX = velocityXRelease.value
+    motion.velocityY = velocityYRelease.value
+    motion.lastUpdatedAt = effectiveTimestamp
   }
 
   function activateSurface(
@@ -335,9 +420,19 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
     const binding = reserveFilter(element)
     if (!binding) return
 
-    const motion = motions.get(element) ?? {
+    const existingMotion = motions.get(element)
+    if (existingMotion) {
+      advanceMotion(
+        existingMotion,
+        timestamp,
+        normalizeUnitStrength(toValue(options.flowStrength)),
+        normalizeUnitStrength(toValue(options.translationStrength)),
+      )
+    }
+    const motion = existingMotion ?? {
       binding,
       energy: 0,
+      lastInputAt: timestamp,
       lastUpdatedAt: timestamp,
       offsetX: 0,
       offsetY: 0,
@@ -345,7 +440,7 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
       velocityY: 0,
     }
     motion.energy = Math.max(motion.energy, Math.min(1, energy))
-    motion.lastUpdatedAt = timestamp
+    motion.lastInputAt = Math.max(timestamp, motion.lastUpdatedAt)
     motion.velocityX = velocity.x
     motion.velocityY = velocity.y
     motions.set(element, motion)
@@ -357,8 +452,6 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
     animationFrame = null
     const flow = normalizeUnitStrength(toValue(options.flowStrength))
     const translation = normalizeUnitStrength(toValue(options.translationStrength))
-    const energyHalfLife = flow * 560
-    const velocityHalfLife = flow * 350
 
     for (const [element, motion] of motions) {
       if (!element.isConnected || element.dataset.glassSurfaceDynamics === undefined || !filterBindings.has(element)) {
@@ -366,14 +459,7 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
         continue
       }
 
-      const elapsed = Math.max(0, timestamp - motion.lastUpdatedAt)
-      const offsetRate = translation * 0.062
-      motion.offsetX += motion.velocityX * elapsed * offsetRate
-      motion.offsetY += motion.velocityY * elapsed * offsetRate
-      motion.energy *= flow === 0 ? 0 : 2 ** (-elapsed / energyHalfLife)
-      motion.velocityX *= flow === 0 ? 0 : 2 ** (-elapsed / velocityHalfLife)
-      motion.velocityY *= flow === 0 ? 0 : 2 ** (-elapsed / velocityHalfLife)
-      motion.lastUpdatedAt = timestamp
+      advanceMotion(motion, timestamp, flow, translation)
       if (motion.energy < 0.006) {
         motion.energy = 0
         writeMotion(motion)
@@ -396,6 +482,20 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
     return surface
   }
 
+  function getInteractionScope(element: HTMLElement) {
+    return element.closest<HTMLElement>('.v-overlay__content')
+  }
+
+  function resetSurfaceMotion(element: HTMLElement) {
+    const motion = motions.get(element)
+    if (!motion) return
+    motion.energy = 0
+    motion.velocityX = 0
+    motion.velocityY = 0
+    writeMotion(motion)
+    motions.delete(element)
+  }
+
   function updateFromPoint(target: EventTarget | null, point: InputPoint) {
     const surface = resolveSurface(target, point.clientX, point.clientY)
     if (!surface) {
@@ -403,20 +503,35 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
       return
     }
 
-    const deltaTime = Math.max(8, point.timestamp - (previousInput?.timestamp ?? point.timestamp - 16))
+    const deltaTime = Math.max(1, point.timestamp - (previousInput?.timestamp ?? point.timestamp - 16))
     const deltaX = point.clientX - (previousInput?.clientX ?? point.clientX)
     const deltaY = point.clientY - (previousInput?.clientY ?? point.clientY)
     const velocityX = Math.max(-1, Math.min(1, deltaX / deltaTime / 1.2))
     const velocityY = Math.max(-1, Math.min(1, deltaY / deltaTime / 1.2))
     const speed = Math.hypot(deltaX, deltaY) / deltaTime
-    const energy =
-      POINTER_ENERGY_FLOOR + Math.min(0.8, speed * (0.34 + normalizeUnitStrength(toValue(options.flowStrength))))
-
-    activateSurface(surface, { x: velocityX, y: velocityY }, energy, point.timestamp)
+    const energy = POINTER_ENERGY_FLOOR + Math.min(0.8, speed * POINTER_ENERGY_SPEED_SCALE)
+    reserveFilter(surface)
+    const interactionScope = getInteractionScope(surface)
+    for (const candidate of filterBindings.keys()) {
+      if (getInteractionScope(candidate) !== interactionScope) {
+        if (interactionScope) resetSurfaceMotion(candidate)
+        continue
+      }
+      const influence = candidate === surface ? 1 : getPointerInfluence(candidate, point)
+      if (influence < 0.04) continue
+      const velocityInfluence = Math.sqrt(influence)
+      activateSurface(
+        candidate,
+        { x: velocityX * velocityInfluence, y: velocityY * velocityInfluence },
+        energy * influence,
+        point.timestamp,
+      )
+    }
     previousInput = point
   }
 
   function handlePointerMove(event: PointerEvent) {
+    if (event.pointerType !== 'mouse' && activeDirectPointerId !== event.pointerId) return
     updateFromPoint(event.target, {
       clientX: event.clientX,
       clientY: event.clientY,
@@ -424,17 +539,20 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
     })
   }
 
-  function handleTouch(event: TouchEvent) {
-    const touch = event.touches.item(0) ?? event.changedTouches.item(0)
-    if (!touch) return
+  function handlePointerDown(event: PointerEvent) {
+    if (event.pointerType === 'mouse') return
+    activeDirectPointerId = event.pointerId
+    previousInput = null
     updateFromPoint(event.target, {
-      clientX: touch.clientX,
-      clientY: touch.clientY,
+      clientX: event.clientX,
+      clientY: event.clientY,
       timestamp: event.timeStamp || performance.now(),
     })
   }
 
-  function handleTouchEnd() {
+  function handlePointerEnd(event: PointerEvent) {
+    if (event.pointerType === 'mouse' || activeDirectPointerId !== event.pointerId) return
+    activeDirectPointerId = null
     previousInput = null
   }
 
@@ -448,22 +566,26 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
     const target = event.target ?? document
     const scrollPositionKey = target === document || target === window ? window : target
     const currentPosition = readScrollPosition(target)
-    const previousPosition = scrollPositions.get(scrollPositionKey) ?? 0
+    const previousPosition = scrollPositions.get(scrollPositionKey)
     scrollPositions.set(scrollPositionKey, currentPosition)
+    if (previousPosition === undefined) return
     const delta = currentPosition - previousPosition
     if (delta === 0 || reducedMotionQuery?.matches) return
 
     const energy = SCROLL_ENERGY_FLOOR + Math.min(0.18, Math.abs(delta) / 420)
     const timestamp = event.timeStamp || performance.now()
+    const interactionScope = target instanceof Element ? target.closest<HTMLElement>('.v-overlay__content') : null
     let activatedSurfaces = 0
     for (const element of filterBindings.keys()) {
       if (activatedSurfaces >= getFilterBudget()) break
+      if (getInteractionScope(element) !== interactionScope) continue
       activateSurface(element, { x: 0, y: Math.max(-1, Math.min(1, delta / 80)) }, energy, timestamp)
       activatedSurfaces += 1
     }
   }
 
   function handleResize() {
+    for (const binding of filterBindings.values()) updateFilterGeometry(binding)
     reconcileFilterBudget()
     scheduleSurfaceSync()
   }
@@ -484,7 +606,9 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
   }
 
   function handleMotionPreference() {
-    if (reducedMotionQuery?.matches) motions.clear()
+    if (reducedMotionQuery?.matches) {
+      motions.clear()
+    }
     for (const binding of filterBindings.values()) updateFilterParameters(binding)
   }
 
@@ -529,10 +653,9 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
       subtree: true,
     })
     window.addEventListener('pointermove', handlePointerMove, { passive: true })
-    window.addEventListener('touchstart', handleTouch, { passive: true })
-    window.addEventListener('touchmove', handleTouch, { passive: true })
-    window.addEventListener('touchend', handleTouchEnd, { passive: true })
-    window.addEventListener('touchcancel', handleTouchEnd, { passive: true })
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true })
+    window.addEventListener('pointerup', handlePointerEnd, { passive: true })
+    window.addEventListener('pointercancel', handlePointerEnd, { passive: true })
     window.addEventListener('scroll', handleScroll, { passive: true })
     window.addEventListener('resize', handleResize, { passive: true })
     document.addEventListener('scroll', handleScroll, { capture: true, passive: true })
@@ -546,10 +669,9 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
     reducedMotionQuery?.removeEventListener('change', handleMotionPreference)
     reducedTransparencyQuery?.removeEventListener('change', handleTransparencyPreference)
     window.removeEventListener('pointermove', handlePointerMove)
-    window.removeEventListener('touchstart', handleTouch)
-    window.removeEventListener('touchmove', handleTouch)
-    window.removeEventListener('touchend', handleTouchEnd)
-    window.removeEventListener('touchcancel', handleTouchEnd)
+    window.removeEventListener('pointerdown', handlePointerDown)
+    window.removeEventListener('pointerup', handlePointerEnd)
+    window.removeEventListener('pointercancel', handlePointerEnd)
     window.removeEventListener('scroll', handleScroll)
     window.removeEventListener('resize', handleResize)
     document.removeEventListener('scroll', handleScroll, true)

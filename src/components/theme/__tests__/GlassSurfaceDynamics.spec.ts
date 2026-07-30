@@ -45,11 +45,18 @@ class ImmediateIntersectionObserver implements IntersectionObserver {
   disconnect() {}
   observe(target: Element) {
     const rect = target.getBoundingClientRect()
+    const isIntersecting =
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.bottom > 0 &&
+      rect.right > 0 &&
+      rect.left < window.innerWidth &&
+      rect.top < window.innerHeight
     this.callback(
       [
         {
           intersectionRect: rect,
-          isIntersecting: rect.width > 0 && rect.height > 0,
+          isIntersecting,
           target,
         } as IntersectionObserverEntry,
       ],
@@ -66,7 +73,7 @@ const defaultProps = {
   appearance: 'clear' as const,
   deformationStrength: 40,
   flowStrength: 40,
-  quality: 'high' as const,
+  quality: 'high' as 'balanced' | 'high',
   routeKey: '/dashboard',
   translationStrength: 40,
 }
@@ -106,9 +113,17 @@ describe('GlassSurfaceDynamics', () => {
     return id ? document.querySelector<SVGFEOffsetElement>(`#${id} feOffset`) : null
   }
 
-  function dispatchPointer(element: HTMLElement, clientX: number, clientY: number, timestamp: number) {
-    const event = new MouseEvent('pointermove', { bubbles: true, clientX, clientY })
+  function dispatchPointer(
+    element: HTMLElement,
+    clientX: number,
+    clientY: number,
+    timestamp: number,
+    options: { pointerId?: number; pointerType?: string; type?: string } = {},
+  ) {
+    const event = new MouseEvent(options.type ?? 'pointermove', { bubbles: true, clientX, clientY })
     Object.defineProperty(event, 'timeStamp', { value: timestamp })
+    Object.defineProperty(event, 'pointerId', { value: options.pointerId ?? 1 })
+    Object.defineProperty(event, 'pointerType', { value: options.pointerType ?? 'mouse' })
     element.dispatchEvent(event)
   }
 
@@ -164,12 +179,26 @@ describe('GlassSurfaceDynamics', () => {
     expect(document.querySelectorAll('[data-glass-displacement-registry]')).toHaveLength(1)
     expect(document.documentElement.dataset.glassDynamicsState).toBe('ready')
     expect(document.documentElement.dataset.glassDisplacementCapability).toBe('svg-backdrop')
+    expect(document.querySelector('feTurbulence')?.getAttribute('numOctaves')).toBe('4')
+    expect([...document.querySelector('filter')!.children].map(node => node.tagName)).toEqual([
+      'feTurbulence',
+      'feOffset',
+      'feDisplacementMap',
+    ])
     expect(document.querySelector('canvas')).toBeNull()
 
     wrapper.unmount()
     expect(navigation).not.toHaveAttribute('data-glass-surface-dynamics')
     expect(card).not.toHaveAttribute('data-glass-surface-dynamics')
     expect(document.querySelector('[data-glass-displacement-registry]')).toBeNull()
+  })
+
+  it('uses a lower-cost two-octave field for balanced quality', () => {
+    createSurface()
+    const wrapper = mountDynamics({ quality: 'balanced' })
+
+    expect(document.querySelector('feTurbulence')?.getAttribute('numOctaves')).toBe('2')
+    wrapper.unmount()
   })
 
   it('folds nested cards into the top-level surface contract', () => {
@@ -251,9 +280,40 @@ describe('GlassSurfaceDynamics', () => {
     activeWrapper.unmount()
   })
 
-  it('moves the hit surface displacement field without writing wallpaper coordinates', () => {
+  it('commits pointer energy immediately and applies flow only during release', () => {
+    const runFlow = (flowStrength: number) => {
+      const surface = createSurface()
+      const wrapper = mountDynamics({ flowStrength })
+      dispatchPointer(surface, 40, 60, 10)
+      dispatchPointer(surface, 120, 60, 26)
+      const immediate = Number(surface.style.getPropertyValue('--glass-dynamics-energy'))
+      flushFrame(42)
+      const firstFrame = Number(surface.style.getPropertyValue('--glass-dynamics-energy'))
+      flushFrame(400)
+      const release = Number(surface.style.getPropertyValue('--glass-dynamics-energy'))
+      wrapper.unmount()
+      surface.remove()
+      frameCallbacks = []
+
+      return { firstFrame, immediate, release }
+    }
+
+    const shortFlow = runFlow(20)
+    const longFlow = runFlow(80)
+
+    expect(shortFlow.immediate).toBeGreaterThan(0.2)
+    expect(shortFlow.immediate).toBeCloseTo(longFlow.immediate, 3)
+    expect(shortFlow.firstFrame).toBeCloseTo(shortFlow.immediate, 3)
+    expect(longFlow.firstFrame).toBeCloseTo(longFlow.immediate, 3)
+    expect(shortFlow.release).toBeLessThan(longFlow.release)
+  })
+
+  it('broadcasts one pointer field across nearby surfaces without writing wallpaper coordinates', () => {
     const first = createSurface()
     const second = createSurface()
+    setVisibleRect(second, { left: 380, right: 700, width: 320 })
+    const distant = createSurface()
+    setVisibleRect(distant, { left: 1100, right: 1260, width: 160 })
     dispatchPointer(first, 40, 60, 10)
     dispatchPointer(first, 120, 60, 26)
 
@@ -264,9 +324,97 @@ describe('GlassSurfaceDynamics', () => {
 
     expect(Number(getDisplacement(first)?.getAttribute('scale'))).toBeGreaterThan(0)
     expect(Number(getOffset(first)?.getAttribute('dx'))).toBeGreaterThan(0)
-    expect(Number(getDisplacement(second)?.getAttribute('scale'))).toBe(0)
+    expect(Number(getDisplacement(second)?.getAttribute('scale'))).toBeGreaterThan(0)
+    expect(Number(getOffset(second)?.getAttribute('dx'))).toBeGreaterThan(0)
+    expect(Number(getOffset(second)?.getAttribute('dx'))).toBeLessThan(Number(getOffset(first)?.getAttribute('dx')))
+    expect(Number(getDisplacement(distant)?.getAttribute('scale'))).toBe(0)
     expect(first.style.cssText).not.toContain('scroll')
     expect(first.style.cssText).not.toContain('wallpaper')
+    wrapper.unmount()
+  })
+
+  it('isolates overlay interaction from surfaces behind the active overlay', () => {
+    const background = createSurface()
+    const overlay = document.createElement('div')
+    overlay.className = 'v-overlay__content'
+    const dialog = document.createElement('article')
+    dialog.className = 'v-card'
+    setVisibleRect(dialog, { left: 240, right: 720, width: 480 })
+    overlay.append(dialog)
+    document.body.append(overlay)
+    const wrapper = mountDynamics()
+
+    dispatchPointer(dialog, 300, 80, 10)
+    dispatchPointer(dialog, 380, 80, 26)
+    flushFrame(42)
+
+    expect(Number(getDisplacement(dialog)?.getAttribute('scale'))).toBeGreaterThan(0)
+    expect(Number(getDisplacement(background)?.getAttribute('scale'))).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('replaces pointer direction synchronously without an attack window', () => {
+    const surface = createSurface()
+    const wrapper = mountDynamics()
+    dispatchPointer(surface, 40, 60, 10)
+    dispatchPointer(surface, 120, 60, 18)
+    flushFrame(26)
+    const forwardOffset = Number(getOffset(surface)?.getAttribute('dx'))
+
+    dispatchPointer(surface, 40, 60, 34)
+    flushFrame(42)
+    flushFrame(58)
+    const reversedOffset = Number(getOffset(surface)?.getAttribute('dx'))
+
+    expect(forwardOffset).toBeGreaterThan(0)
+    expect(reversedOffset).toBeLessThan(forwardOffset)
+    wrapper.unmount()
+  })
+
+  it('integrates continuous pointer input consistently across event frequencies', () => {
+    const runInput = (eventInterval: number) => {
+      const surface = createSurface()
+      const wrapper = mountDynamics()
+
+      for (let timestamp = 8; timestamp <= 968; timestamp += 4) {
+        if ((timestamp - 8) % eventInterval === 0) {
+          dispatchPointer(surface, 40 + (timestamp - 8) * 0.08, 60, timestamp)
+        }
+        if ((timestamp - 8) % 16 === 0) flushFrame(timestamp)
+      }
+      flushFrame(984)
+      const offset = Number(getOffset(surface)?.getAttribute('dx'))
+      wrapper.unmount()
+      surface.remove()
+      frameCallbacks = []
+
+      return offset
+    }
+
+    const offsets = [4, 8, 16, 32].map(runInput)
+    expect(Math.max(...offsets) - Math.min(...offsets)).toBeLessThan(0.08)
+  })
+
+  it('bounds sustained flow inside the filter bleed and releases the bound after reversal', () => {
+    const surface = createSurface()
+    const wrapper = mountDynamics()
+
+    for (let index = 0; index <= 180; index += 1) {
+      const timestamp = 8 + index * 16
+      dispatchPointer(surface, 40 + index * 20, 60, timestamp)
+      flushFrame(timestamp)
+    }
+    const saturatedOffset = Number(getOffset(surface)?.getAttribute('dx'))
+
+    for (let index = 1; index <= 20; index += 1) {
+      const timestamp = 2904 + index * 16
+      dispatchPointer(surface, 3640 - index * 20, 60, timestamp)
+      flushFrame(timestamp)
+    }
+    const reversedOffset = Number(getOffset(surface)?.getAttribute('dx'))
+
+    expect(saturatedOffset).toBeCloseTo(320 * 0.12, 2)
+    expect(reversedOffset).toBeLessThan(saturatedOffset)
     wrapper.unmount()
   })
 
@@ -278,14 +426,41 @@ describe('GlassSurfaceDynamics', () => {
     const wrapper = mountDynamics()
 
     expect(document.querySelectorAll('filter')).toHaveLength(8)
-    scrollContainer.scrollTop = 96
     scrollContainer.dispatchEvent(new Event('scroll'))
+    scrollContainer.scrollTop = 96
+    const scrollEvent = new Event('scroll')
+    Object.defineProperty(scrollEvent, 'timeStamp', { value: 16 })
+    scrollContainer.dispatchEvent(scrollEvent)
+    flushFrame(32)
 
     const scales = surfaces
       .map(surface => Number(getDisplacement(surface)?.getAttribute('scale')))
       .filter(scale => Number.isFinite(scale) && scale > 0)
     expect(scales).toHaveLength(8)
     expect(Math.max(...scales)).toBeLessThan(12)
+    wrapper.unmount()
+  })
+
+  it('baselines a newly observed non-zero scroll target before applying small deltas', () => {
+    const scrollContainer = document.createElement('section')
+    document.body.append(scrollContainer)
+    const surface = createSurface()
+    const wrapper = mountDynamics()
+
+    scrollContainer.scrollTop = 480
+    scrollContainer.dispatchEvent(new Event('scroll'))
+    flushFrame(16)
+    expect(Number(getDisplacement(surface)?.getAttribute('scale'))).toBe(0)
+
+    scrollContainer.scrollTop = 481
+    const scrollEvent = new Event('scroll')
+    Object.defineProperty(scrollEvent, 'timeStamp', { value: 24 })
+    scrollContainer.dispatchEvent(scrollEvent)
+    flushFrame(40)
+
+    const scale = Number(getDisplacement(surface)?.getAttribute('scale'))
+    expect(scale).toBeGreaterThan(0)
+    expect(scale).toBeLessThan(4)
     wrapper.unmount()
   })
 
@@ -298,6 +473,24 @@ describe('GlassSurfaceDynamics', () => {
     window.dispatchEvent(new Event('resize'))
 
     expect(document.querySelectorAll('filter')).toHaveLength(8)
+    wrapper.unmount()
+  })
+
+  it('keeps the bounded registry stable across repeated broadcasts and ignores offscreen surfaces', () => {
+    const surfaces = Array.from({ length: 12 }, () => createSurface())
+    const offscreen = createSurface()
+    setVisibleRect(offscreen, { bottom: 1100, top: 900, y: 900 })
+    const wrapper = mountDynamics()
+    const initialFilterIds = [...document.querySelectorAll('filter')].map(filter => filter.id)
+
+    for (let timestamp = 8; timestamp <= 64; timestamp += 8) {
+      dispatchPointer(surfaces[0], 40 + timestamp * 2, 60, timestamp)
+      flushFrame(timestamp)
+    }
+
+    expect([...document.querySelectorAll('filter')].map(filter => filter.id)).toEqual(initialFilterIds)
+    expect(initialFilterIds).toHaveLength(12)
+    expect(offscreen.style.getPropertyValue('--glass-surface-displacement-filter')).toBe('')
     wrapper.unmount()
   })
 
@@ -375,33 +568,32 @@ describe('GlassSurfaceDynamics', () => {
     wrapper.unmount()
   })
 
-  it('resets touch velocity between gestures', () => {
-    const card = createSurface()
-    const wrapper = mountDynamics()
-    const dispatchTouch = (type: string, clientX: number, timestamp: number) => {
-      const event = new Event(type, { bubbles: true })
-      const touch = { clientX, clientY: 70 }
-      Object.defineProperty(event, 'timeStamp', { value: timestamp })
-      Object.defineProperty(event, 'touches', {
-        value: { item: () => (type === 'touchcancel' ? null : touch) },
-      })
-      Object.defineProperty(event, 'changedTouches', {
-        value: { item: () => touch },
-      })
-      card.dispatchEvent(event)
+  it('resets direct-pointer coordinates and ignores legacy duplicate touch events', () => {
+    const runGesture = (withMouseInput: boolean) => {
+      const card = createSurface()
+      const wrapper = mountDynamics()
+      if (withMouseInput) dispatchPointer(card, 40, 70, 10)
+      dispatchPointer(card, 240, 70, 10, { pointerId: 7, pointerType: 'touch', type: 'pointerdown' })
+      dispatchPointer(card, 248, 70, 18, { pointerId: 7, pointerType: 'touch' })
+      card.dispatchEvent(new Event('touchmove', { bubbles: true }))
+      flushFrame(42)
+      const offset = Number(getOffset(card)?.getAttribute('dx'))
+      dispatchPointer(card, 248, 70, 48, { pointerId: 7, pointerType: 'touch', type: 'pointercancel' })
+      wrapper.unmount()
+      card.remove()
+      frameCallbacks = []
+
+      return offset
     }
 
-    dispatchTouch('touchstart', 40, 10)
-    dispatchTouch('touchmove', 120, 26)
-    dispatchTouch('touchcancel', 120, 32)
-    dispatchTouch('touchstart', 240, 48)
-    flushFrame(64)
+    const isolatedTouch = runGesture(false)
+    const touchAfterMouse = runGesture(true)
 
-    expect(Number(getOffset(card)?.getAttribute('dx'))).toBe(0)
-    wrapper.unmount()
+    expect(isolatedTouch).toBeGreaterThan(0)
+    expect(touchAfterMouse).toBeCloseTo(isolatedTouch, 3)
   })
 
-  it('normalizes displacement decay by elapsed time instead of refresh rate', () => {
+  it('normalizes release energy across frame rates and bounds offset after long gaps', () => {
     const runFrames = (times: number[]) => {
       const card = createSurface()
       const wrapper: VueWrapper = mountDynamics()
@@ -421,8 +613,24 @@ describe('GlassSurfaceDynamics', () => {
 
     const sixtyHertz = runFrames([42, 58])
     const oneTwentyHertz = runFrames([34, 42, 50, 58])
+    const denseFrames = (end: number) => {
+      const times: number[] = []
+      for (let timestamp = 42; timestamp < end; timestamp += 16) times.push(timestamp)
+      if (times.at(-1) !== end) times.push(end)
+
+      return times
+    }
+    const denseRelease = runFrames(denseFrames(400))
+    const sparseRelease = runFrames([42, 58, 400])
+    const denseLongGap = runFrames(denseFrames(2000))
+    const sparseLongGap = runFrames([42, 58, 2000])
 
     expect(oneTwentyHertz.energy).toBeCloseTo(sixtyHertz.energy, 3)
-    expect(oneTwentyHertz.offset).toBeCloseTo(sixtyHertz.offset, 1)
+    expect(oneTwentyHertz.offset).toBeCloseTo(sixtyHertz.offset, 3)
+    expect(sparseRelease.energy).toBeCloseTo(denseRelease.energy, 3)
+    expect(sparseRelease.offset).toBeCloseTo(denseRelease.offset, 3)
+    expect(sparseLongGap.energy).toBeCloseTo(denseLongGap.energy, 3)
+    expect(sparseLongGap.offset).toBeCloseTo(denseLongGap.offset, 2)
+    expect(sparseLongGap.offset).toBeLessThan(8)
   })
 })

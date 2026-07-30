@@ -1184,14 +1184,14 @@ html[data-theme='glass'] {
 
 // 光学质量使用更克制的磨砂半径，让位移后的壁纸纹理在原生背板中保持可辨。
 html[data-theme='glass'][data-glass-appearance='frosted'][data-glass-dynamics-quality='balanced'] {
-  --glass-native-surface-blur: min(var(--glass-blur-surface), 16px);
-  --glass-native-raised-blur: min(var(--glass-blur-raised), 24px);
+  --glass-native-surface-blur: calc(16px * var(--glass-frost-blur-scale, 1));
+  --glass-native-raised-blur: calc(24px * var(--glass-frost-blur-scale, 1));
   --glass-saturate: 162%;
 }
 
 html[data-theme='glass'][data-glass-appearance='frosted'][data-glass-dynamics-quality='high'] {
-  --glass-native-surface-blur: min(var(--glass-blur-surface), 10px);
-  --glass-native-raised-blur: min(var(--glass-blur-raised), 16px);
+  --glass-native-surface-blur: calc(10px * var(--glass-frost-blur-scale, 1));
+  --glass-native-raised-blur: calc(16px * var(--glass-frost-blur-scale, 1));
   --glass-saturate: 154%;
 }
 

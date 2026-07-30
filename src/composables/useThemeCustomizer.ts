@@ -469,6 +469,7 @@ export function applyThemeCustomizerRootSettings(
   const materialResponse = getGlassMaterialResponse(settings.glassAppearance, settings.glassTransparencyStrength)
   const frostBlur = getGlassCssFrostBlur(settings.glassTransparencyStrength)
   const applyGlassResponse = (element: HTMLElement) => {
+    element.style.setProperty('--glass-frost-blur-scale', String(materialResponse.frostBlurScale))
     element.style.setProperty('--glass-surface-density', String(materialResponse.surfaceDensity))
     element.style.setProperty('--glass-tint-density', String(materialResponse.tintDensity))
     element.style.setProperty('--glass-blur-surface', `${frostBlur.surface}px`)

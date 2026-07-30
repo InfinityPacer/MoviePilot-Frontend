@@ -73,9 +73,10 @@ Chrome 通过语法探测并由真实浏览器像素回归验证 SVG filter refe
 
 SVG filter definition 是 Chrome 当前的位移应用路径，不代表动态场只能由 SVG primitive 生成。若
 真实浏览器校准证明 `feTurbulence` 无法达到所需流体细节，可引入有明确上限的 surface-attached
-canvas / GPU pool 生成程序化 displacement field，再由同一原生 backdrop pipeline 应用。GPU 资源
-不得读取、缓存或上传真实壁纸，不得根据 `window.scrollY` 重建壁纸坐标，也不得成为另一套完整玻璃
-renderer。
+canvas / GPU pool 生成程序化 displacement field，但前提是目标浏览器提供并经像素回归证明该 field
+能被同一原生 backdrop pipeline 直接消费。不能直接消费时，不得退化为独立 RGBA 光斑层或复制到
+多个 surface Canvas2D。GPU 资源不得读取、缓存或上传真实壁纸，不得根据 `window.scrollY` 重建壁纸
+坐标，也不得成为另一套完整玻璃 renderer。
 
 引入 GPU field generator 时必须满足：
 
@@ -84,6 +85,8 @@ renderer。
 - context loss、DPR 与尺寸变化由统一恢复路径处理；
 - 动态纹理提交延迟只能影响位移场演化，不能改变原生 backdrop 的壁纸位置、密度或 blur；
 - OffscreenCanvas 只用于程序化场生成，不宣称解决 compositor 同步。
+- 禁止共享 WebGL generator 每帧复制到多个 surface Canvas2D；能力验证必须覆盖真实 consumer、
+  backing pixel、活动表面数、帧率与合成成本。
 
 ### Content
 
@@ -136,9 +139,13 @@ renderer、scroll WebGL renderer、真实壁纸纹理准备事务与双 context 
 1. 统一管理 fixed、overlay 与 scroll 的顶层 surface；嵌套表面继续折叠。
 2. MutationObserver 只响应候选 surface 的新增、删除；材质档位、能力状态和可见性由各自生命周期更新。
 3. 页面切换、虚拟列表替换和 KeepAlive 恢复时重新同步 surface 集合。
-4. pointer、touchstart、touchmove、touchend 复用唯一 interaction source。
-5. pointer/touch 只激活命中 surface；scroll 使用低幅统一位移，不生成逐卡光斑。
-6. reduced motion 下关闭尾迹演化，只保留静态边缘响应。
+4. mouse、touch 与 pen 统一使用 Pointer Events；直接触摸手势按 pointer 生命周期重置坐标，不并行消费
+   legacy Touch Events。
+5. 命中 surface 作为输入锚点，在既有可见 filter 预算内向邻近 surface 广播同相位速度，并按空间距离
+   衰减能量；输入立即提交，连续输入在有界 freshness window 内保持当前速度，随后使用刷新率无关的
+   解析指数 release。offset 必须限制在 filter bleed 内，并能在反向输入后退出边界。scroll 使用低幅统一
+   位移，不生成逐卡光斑。
+6. reduced motion 下关闭动态演化，只保留静态边缘响应。
 7. reduced transparency 下移除 dynamics，并由现有 CSS fallback 接管。
 
 filter definition 只分配给进入视口的顶层表面，离开视口立即释放。可见表面和滚动激活数量必须有

@@ -26,6 +26,8 @@ export interface GlassOpticalParameters {
 }
 
 export interface GlassMaterialResponse {
+  /** 光学磨砂半径随通透度变化的比例，不影响标准档半径。 */
+  frostBlurScale: number
   /** 表面遮罩对真实壁纸的覆盖密度。 */
   surfaceDensity: number
   /** 色调材质的主体染色密度。 */
@@ -139,6 +141,7 @@ const GLASS_SURFACE_DENSITY: Record<GlassAppearance, readonly number[]> = {
   frosted: [1, 0.96, 0.86, 0.68, 0.5, 0.4],
 }
 const GLASS_TINT_DENSITY = [1, 0.9, 0.65, 0.48, 0.36, 0.28] as const
+const GLASS_FROST_DENSITY = [1, 0.9, 0.7, 0.4, 0.18, 0.1] as const
 
 /** 在相邻业务锚点之间使用零斜率边界插值，避免滑杆经过锚点时出现视觉折线。 */
 function interpolateGlassResponse(value: unknown, anchors: readonly number[]) {
@@ -155,9 +158,12 @@ function interpolateGlassResponse(value: unknown, anchors: readonly number[]) {
   return anchors[lowerIndex] + (anchors[upperIndex] - anchors[lowerIndex]) * smoothProgress
 }
 
-/** 一个通透度输入派生背板密度与色调密度；曝光和透射亮度不在此处计算。 */
+/** 一个通透度输入派生磨砂半径比例、背板密度与色调密度；曝光和透射亮度不在此处计算。 */
 export function getGlassMaterialResponse(appearance: GlassAppearance, value: unknown): GlassMaterialResponse {
+  const frostDensity = interpolateGlassResponse(value, GLASS_FROST_DENSITY)
+
   return {
+    frostBlurScale: 0.4 + frostDensity * 1.2,
     surfaceDensity: interpolateGlassResponse(value, GLASS_SURFACE_DENSITY[appearance]),
     tintDensity: interpolateGlassResponse(value, GLASS_TINT_DENSITY),
   }

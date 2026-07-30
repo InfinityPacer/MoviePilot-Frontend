@@ -162,6 +162,7 @@ describe('glass material parameters', () => {
 
   it('derives independent material responses from piecewise smooth transparency anchors', () => {
     expect(getGlassMaterialResponse('clear', 0)).toMatchObject({
+      frostBlurScale: 1.6,
       surfaceDensity: 1,
     })
     expect(getGlassMaterialResponse('tinted', 50)).toMatchObject({
@@ -172,6 +173,7 @@ describe('glass material parameters', () => {
       surfaceDensity: 0.96,
     })
     expect(getGlassMaterialResponse('frosted', 100)).toMatchObject({
+      frostBlurScale: 0.52,
       surfaceDensity: 0.4,
     })
     expect(getGlassCssFrostBlur(0)).toEqual({ raised: 84, surface: 64 })
@@ -183,6 +185,9 @@ describe('glass material parameters', () => {
     )
     expect(
       samples.every((sample, index) => index === 0 || sample.surfaceDensity < samples[index - 1].surfaceDensity),
+    ).toBe(true)
+    expect(
+      samples.every((sample, index) => index === 0 || sample.frostBlurScale < samples[index - 1].frostBlurScale),
     ).toBe(true)
   })
 

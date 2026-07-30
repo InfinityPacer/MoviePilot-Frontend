@@ -184,6 +184,8 @@ describe('useThemeCustomizer glass settings', () => {
     expect(document.body.style.getPropertyValue('--glass-reflection')).toBe('0.35')
     expect(Number(document.documentElement.style.getPropertyValue('--glass-transmission'))).toBeCloseTo(54 / 70)
     expect(document.body.style.getPropertyValue('--glass-transmission-brightness')).not.toBe('')
+    expect(Number(document.documentElement.style.getPropertyValue('--glass-frost-blur-scale'))).toBeCloseTo(1.25166)
+    expect(Number(document.body.style.getPropertyValue('--glass-frost-blur-scale'))).toBeCloseTo(1.25166)
     expect(Number(document.documentElement.style.getPropertyValue('--glass-surface-density'))).toBeCloseTo(0.72972)
     expect(Number(document.body.style.getPropertyValue('--glass-tint-density'))).toBeCloseTo(0.66215)
   })

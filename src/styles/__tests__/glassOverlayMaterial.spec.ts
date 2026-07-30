@@ -89,11 +89,13 @@ describe('glass overlay material styles', () => {
     const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
 
     expect(styles).toMatch(
-      /\[data-glass-appearance='frosted'\]\[data-glass-dynamics-quality='balanced'\][\s\S]*?--glass-native-surface-blur:\s*min\(var\(--glass-blur-surface\), 16px\);/,
+      /\[data-glass-appearance='frosted'\]\[data-glass-dynamics-quality='balanced'\][\s\S]*?--glass-native-surface-blur:\s*calc\(16px \* var\(--glass-frost-blur-scale, 1\)\);/,
     )
     expect(styles).toMatch(
-      /\[data-glass-appearance='frosted'\]\[data-glass-dynamics-quality='high'\][\s\S]*?--glass-native-surface-blur:\s*min\(var\(--glass-blur-surface\), 10px\);/,
+      /\[data-glass-appearance='frosted'\]\[data-glass-dynamics-quality='high'\][\s\S]*?--glass-native-surface-blur:\s*calc\(10px \* var\(--glass-frost-blur-scale, 1\)\);/,
     )
+    expect(styles).toContain('--glass-native-raised-blur: calc(24px * var(--glass-frost-blur-scale, 1))')
+    expect(styles).toContain('--glass-native-raised-blur: calc(16px * var(--glass-frost-blur-scale, 1))')
     expect(styles).toContain('--glass-blur-surface: 40px')
   })
 })
