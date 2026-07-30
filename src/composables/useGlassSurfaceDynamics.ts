@@ -39,6 +39,8 @@ const FLOW_OFFSET_BLEED_RATIO = 0.12
 const POINTER_INPUT_FRESHNESS_DURATION = 40
 const POINTER_INFLUENCE_MIN_RADIUS = 306
 const POINTER_INFLUENCE_MAX_RADIUS = 612
+const FROSTED_DISPLACEMENT_MIN_SCALE = 1.2
+const FROSTED_DISPLACEMENT_MAX_SCALE = 1.5
 let registrySequence = 0
 
 export type GlassDynamicsState = 'disabled' | 'ready' | 'unsupported'
@@ -111,6 +113,14 @@ function advanceRelease(value: number, elapsed: number, halfLife: number) {
 
 function clampFlowOffset(value: number, maximum: number) {
   return Math.max(-maximum, Math.min(maximum, value))
+}
+
+/** 低能传播保持克制，高能直接输入补足磨砂扩散损失的位移边界。 */
+function getFrostedDisplacementScale(energy: number) {
+  const normalized = Math.max(0, Math.min(1, energy))
+  const response = normalized * normalized * (3 - 2 * normalized)
+
+  return FROSTED_DISPLACEMENT_MIN_SCALE + response * (FROSTED_DISPLACEMENT_MAX_SCALE - FROSTED_DISPLACEMENT_MIN_SCALE)
 }
 
 function isVisibleSurface(element: HTMLElement) {
@@ -208,8 +218,13 @@ export function useGlassSurfaceDynamics(options: UseGlassSurfaceDynamicsOptions)
   function getDisplacementScale(energy: number) {
     const deformation = normalizeUnitStrength(toValue(options.deformationStrength))
     const qualityScale = Math.sqrt(deformation) * (toValue(options.quality) === 'high' ? 42 : 26)
+    // 磨砂的后置扩散会衰减位移边界，只补偿位移幅度，不切换 blur、密度或亮度。
     const appearanceScale =
-      toValue(options.appearance) === 'frosted' ? 1.08 : toValue(options.appearance) === 'tinted' ? 0.94 : 1
+      toValue(options.appearance) === 'frosted'
+        ? getFrostedDisplacementScale(energy)
+        : toValue(options.appearance) === 'tinted'
+          ? 0.94
+          : 1
 
     return energy * qualityScale * appearanceScale
   }

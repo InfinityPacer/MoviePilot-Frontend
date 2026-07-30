@@ -70,7 +70,7 @@ class ImmediateIntersectionObserver implements IntersectionObserver {
 }
 
 const defaultProps = {
-  appearance: 'clear' as const,
+  appearance: 'clear' as 'clear' | 'frosted' | 'tinted',
   deformationStrength: 40,
   flowStrength: 40,
   quality: 'high' as 'balanced' | 'high',
@@ -278,6 +278,49 @@ describe('GlassSurfaceDynamics', () => {
       expect(activeScale).toBeGreaterThan(0)
     }
     activeWrapper.unmount()
+  })
+
+  it('uses stronger frosted compensation for direct input than low-energy propagation', () => {
+    const readPointerScale = (appearance: 'clear' | 'frosted') => {
+      const surface = createSurface()
+      const wrapper = mountDynamics({ appearance })
+      dispatchPointer(surface, 40, 60, 10)
+      dispatchPointer(surface, 120, 60, 26)
+      flushFrame(42)
+      const scale = Number(getDisplacement(surface)?.getAttribute('scale'))
+      wrapper.unmount()
+      surface.remove()
+      frameCallbacks = []
+
+      return scale
+    }
+
+    const readScrollScale = (appearance: 'clear' | 'frosted') => {
+      const scrollContainer = document.createElement('section')
+      document.body.append(scrollContainer)
+      const surface = createSurface()
+      const wrapper = mountDynamics({ appearance })
+      scrollContainer.dispatchEvent(new Event('scroll'))
+      scrollContainer.scrollTop = 1
+      const scrollEvent = new Event('scroll')
+      Object.defineProperty(scrollEvent, 'timeStamp', { value: 16 })
+      scrollContainer.dispatchEvent(scrollEvent)
+      flushFrame(32)
+      const scale = Number(getDisplacement(surface)?.getAttribute('scale'))
+      wrapper.unmount()
+      scrollContainer.remove()
+      surface.remove()
+      frameCallbacks = []
+
+      return scale
+    }
+
+    const directRatio = readPointerScale('frosted') / readPointerScale('clear')
+    const lowEnergyRatio = readScrollScale('frosted') / readScrollScale('clear')
+
+    expect(directRatio).toBeCloseTo(1.5, 2)
+    expect(lowEnergyRatio).toBeGreaterThanOrEqual(1.2)
+    expect(lowEnergyRatio).toBeLessThan(1.21)
   })
 
   it('commits pointer energy immediately and applies flow only during release', () => {
