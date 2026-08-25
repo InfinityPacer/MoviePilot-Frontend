@@ -393,15 +393,17 @@ describe('glass optical surface discovery', () => {
     expect(document.documentElement.dataset.glassRendererState).toBe('fallback')
   })
 
-  it('excludes the navbar from mobile clear optical surfaces', () => {
+  it('keeps the navbar in mobile clear optical surfaces for renderer-native shell material', () => {
     appendOpticalSurface('layout-navbar', { height: 64, width: 390, x: 0, y: 0 })
     const content = appendOpticalSurface('dashboard-content', { height: 200, width: 350, x: 20, y: 120 })
     content.dataset.glassOpticalSurface = ''
 
     const rects = collectGlassOpticalRects(390, 800, 'clear')
 
-    expect(rects).toHaveLength(1)
-    expect(rects[0]).toMatchObject({ height: 200, width: 350, x: 20, y: 120 })
+    expect(rects).toEqual([
+      expect.objectContaining({ height: 64, width: 390, x: 0, y: 0 }),
+      expect.objectContaining({ height: 200, width: 350, x: 20, y: 120 }),
+    ])
   })
 
   it('keeps the navbar in mobile frosted optical surfaces', () => {
@@ -1954,6 +1956,51 @@ describe('glass optical surface discovery', () => {
     expect(material.uniforms.uSurfaceDynamics.value[0]).toBe(0)
     expect(material.fragmentShader).toContain('uniform float uSurfaceDynamics[8]')
     expect(material.fragmentShader).toContain('float surfaceDynamic = uSurfaceDynamics[i]')
+    scope.stop()
+  })
+
+  it('applies bounded chromatic dispersion only to the navbar in the fixed renderer', async () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1200)
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800)
+    appendOpticalSurface('layout-vertical-nav', { height: 800, width: 260, x: 0, y: 0 })
+    appendOpticalSurface('layout-navbar', { height: 64, width: 940, x: 260, y: 0 })
+    const three = await import('three')
+    const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
+    const scope = effectScope()
+    const renderer = scope.run(() =>
+      useGlassOpticalRenderer({
+        active: ref(true),
+        appearance: ref('clear'),
+        canvas: ref(document.createElement('canvas')),
+        dynamicsActive: ref(false),
+        quality: ref('balanced'),
+        routeKey: ref('/dashboard'),
+        surfaceSpace: 'fixed',
+        tintColor: ref('#8D51F9'),
+        wallpaperUrl: ref('https://example.com/wallpaper.jpg'),
+      }),
+    )
+
+    await vi.waitFor(() => expect(renderer?.state.value).toBe('ready'))
+    await vi.waitFor(() => expect(render).toHaveBeenCalled())
+    const scene = render.mock.calls.at(-1)?.[0] as unknown as {
+      children: Array<{
+        material: {
+          fragmentShader: string
+          uniforms: {
+            uRectCount: { value: number }
+            uSurfaceDispersion: { value: number[] }
+          }
+        }
+      }>
+    }
+    const material = scene.children[0].material
+
+    expect(material.uniforms.uRectCount.value).toBe(2)
+    expect(material.uniforms.uSurfaceDispersion.value.slice(0, 2).sort()).toEqual([0, 1])
+    expect(material.fragmentShader).toContain('uniform float uSurfaceDispersion[8]')
+    expect(material.fragmentShader).toContain('float chromaticEdgeResponse = max(edgeResponse, bottomEdge)')
+    expect(material.fragmentShader).toContain('surfaceDispersion * mix(1.1, 2.2, uQuality)')
     scope.stop()
   })
 
@@ -4634,9 +4681,8 @@ describe('glass optical surface discovery', () => {
     )
     expect(scene.children[0].material.fragmentShader).toContain('mix(1.0, 0.78, sharedDirectionality)')
     expect(scene.children[0].material.fragmentShader).toContain('uMotion *\n      uMotion')
-    expect(scene.children[0].material.fragmentShader).toContain(
-      'float dynamicsPresence = max(materialEnergy, sharedMotionPresence * 0.36)',
-    )
+    expect(scene.children[0].material.fragmentShader).toContain('float dynamicsPresence = max(')
+    expect(scene.children[0].material.fragmentShader).toContain('surfaceDispersion * mix(0.16, 0.24, uQuality)')
     expect(scene.children[0].material.fragmentShader).toContain('uniform float uFlowStrength')
     expect(scene.children[0].material.fragmentShader).toContain('uniform float uReflectionStrength')
     expect(scene.children[0].material.fragmentShader).not.toContain('uWakeProgress')
