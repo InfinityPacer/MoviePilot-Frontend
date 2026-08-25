@@ -80,13 +80,6 @@ export interface GlassOpticalPoint {
   y: number
 }
 
-export interface GlassOpticalSpringState {
-  /** 当前跟随位置。 */
-  position: number
-  /** 当前每秒位移速度。 */
-  velocity: number
-}
-
 /** 光学表面在共享 renderer 中采用的动态响应合同。 */
 export type GlassOpticalSurfaceMode = 'dynamic' | 'static-material'
 
@@ -125,16 +118,19 @@ export interface GlassOpticalRenderProfile {
   pixelRatioCap: number
   /** 新输入立即作用于镜片位置的比例。 */
   pointerImmediateResponse: number
-  /** 镜片跟随弹簧的阻尼比。 */
-  springDamping: number
-  /** 镜片跟随弹簧的角频率，单位弧度每秒。 */
-  springFrequency: number
   /** 活动壁纸进入 GPU 前的最长边限制。 */
   textureLimit: number
   textureSource: 'auto' | 'procedural' | 'wallpaper'
   /** 参与液态方向计算的最近输入采样数量。 */
   trailCount: number
 }
+
+/** Balanced 与 High 共享输入手感；质量档只分配渲染精度和受控光学预算。 */
+const GLASS_OPTICAL_SHARED_MOTION_PROFILE = {
+  motionDuration: 360,
+  motionHalfLife: 82,
+  pointerImmediateResponse: 0.7,
+} as const
 
 /** 将用户滑杆输入收敛到 renderer 支持的整数范围，非法存量值回落到默认视觉。 */
 export function normalizeGlassOpticalStrength(value: unknown) {
@@ -427,18 +423,14 @@ export function getGlassOpticalRenderProfile(
   const highQuality = quality === 'high'
 
   return {
+    ...GLASS_OPTICAL_SHARED_MOTION_PROFILE,
     bufferQuality: quality,
     contentProtection: highQuality,
     diffusionSamples: highQuality ? 9 : 5,
     flowField: highQuality,
     flowHalfLife: highQuality ? 130 : 0,
     maxRefractionPixels: highQuality ? 9 : 6,
-    motionDuration: highQuality ? 540 : 360,
-    motionHalfLife: highQuality ? 125 : 82,
     pixelRatioCap: highQuality ? 1.5 : 1,
-    pointerImmediateResponse: highQuality ? 0.58 : 0.7,
-    springDamping: highQuality ? 0.78 : 0.9,
-    springFrequency: highQuality ? 18 : 24,
     textureLimit: highQuality ? 4096 : 3072,
     textureSource: routeKey.startsWith('/login') ? 'auto' : 'wallpaper',
     trailCount: highQuality ? 4 : 2,
@@ -463,51 +455,6 @@ export function getGlassOpticalMotionEnergy(elapsed: number, duration: number, h
   const tailTaper = tailProgress * tailProgress * (3 - 2 * tailProgress)
 
   return getGlassOpticalDecay(halfLife, safeElapsed) * tailTaper
-}
-
-/**
- * 解析阻尼弹簧的精确时间步，避免刷新率变化改变跟随手感。
- * 欠阻尼参数只允许一次可见回摆，生命周期结束后由 renderer 归零。
- */
-export function stepGlassOpticalSpring(
-  state: GlassOpticalSpringState,
-  target: number,
-  deltaMs: number,
-  frequency: number,
-  damping: number,
-): GlassOpticalSpringState {
-  const deltaSeconds = Math.min(0.064, Math.max(0, deltaMs / 1000))
-  const safeFrequency = Math.max(0.001, frequency)
-  const safeDamping = Math.max(0, damping)
-  const offset = state.position - target
-  if (deltaSeconds <= 0) return state
-
-  if (safeDamping >= 1) {
-    const decay = Math.exp(-safeFrequency * deltaSeconds)
-    const coefficient = state.velocity + safeFrequency * offset
-
-    return {
-      position: target + (offset + coefficient * deltaSeconds) * decay,
-      velocity: (state.velocity - safeFrequency * coefficient * deltaSeconds) * decay,
-    }
-  }
-
-  const dampedFrequency = safeFrequency * Math.sqrt(1 - safeDamping * safeDamping)
-  const decay = Math.exp(-safeDamping * safeFrequency * deltaSeconds)
-  const angle = dampedFrequency * deltaSeconds
-  const cosine = Math.cos(angle)
-  const sine = Math.sin(angle)
-  const sineCoefficient = (state.velocity + safeDamping * safeFrequency * offset) / dampedFrequency
-  const oscillation = offset * cosine + sineCoefficient * sine
-
-  return {
-    position: target + decay * oscillation,
-    velocity:
-      decay *
-      (-safeDamping * safeFrequency * oscillation -
-        offset * dampedFrequency * sine +
-        sineCoefficient * dampedFrequency * cosine),
-  }
 }
 
 /** 单个双相尾波只有一个波峰和一个波谷，不形成连续周期波列。 */

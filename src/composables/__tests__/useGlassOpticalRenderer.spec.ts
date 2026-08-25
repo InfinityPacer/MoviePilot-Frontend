@@ -4663,9 +4663,7 @@ describe('glass optical surface discovery', () => {
     expect(scene.children[0].material.fragmentShader).toContain(
       'float rippleGradientEnergy = smoothstep(0.003, 0.08, rippleGradientLength)',
     )
-    expect(scene.children[0].material.fragmentShader).toContain(
-      'rippleGradient * mix(230.0, 335.0, uQuality) * uRippleDeformationStrength',
-    )
+    expect(scene.children[0].material.fragmentShader).toContain('rippleGradient * 230.0 * uRippleDeformationStrength')
     expect(scene.children[0].material.fragmentShader).toContain(
       'uAppearance > 1.5 ? 1.25 : (uAppearance > 0.5 ? 0.86 : 0.72)',
     )
@@ -4689,7 +4687,7 @@ describe('glass optical surface discovery', () => {
     expect(scene.children[0].material.fragmentShader).not.toContain('temporalEnergy')
     expect(scene.children[0].material.fragmentShader).toContain('const float dynamicRangeScale = 0.52')
     expect(scene.children[0].material.fragmentShader).toContain('const float dynamicRangeDensity = 3.698')
-    expect(scene.children[0].material.fragmentShader).toContain('float pointerSpread = mix(26.0, 17.0, uQuality)')
+    expect(scene.children[0].material.fragmentShader).toContain('float pointerSpread = 26.0')
     expect(scene.children[0].material.fragmentShader).not.toContain(
       'mix(mix(26.0, 17.0, uQuality), mix(12.0, 8.0, uQuality), frosted)',
     )

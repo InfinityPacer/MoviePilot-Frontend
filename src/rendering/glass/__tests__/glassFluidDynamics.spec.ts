@@ -201,6 +201,9 @@ describe('glass fluid dynamics', () => {
     expect(GLASS_FLUID_FRAGMENT_SURFACE_SHAPE).toContain('pow(clamp(pointerCoverageShape * uMotion, 0.0, 1.0), 1.15)')
     expect(GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION).toContain('pointerDelta * pointerEnergy * pointerStrength')
     expect(GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION).not.toContain('pointerCoverageEnergy')
+    expect(GLASS_FLUID_FRAGMENT_SURFACE_SHAPE).toContain('float pointerSpread = 26.0')
+    expect(GLASS_FLUID_FRAGMENT_SURFACE_SHAPE).not.toContain('mix(26.0, 17.0, uQuality)')
+    expect(GLASS_FLUID_FRAGMENT_SURFACE_SHAPE).not.toContain('mix(0.027, 0.044, uQuality)')
   })
 
   it('squares the signed coverage offset without GLSL pow', () => {

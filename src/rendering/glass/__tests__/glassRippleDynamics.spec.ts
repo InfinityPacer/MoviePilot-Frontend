@@ -92,7 +92,9 @@ interface RenderSnapshot {
   impulseOffset: number
   impulseSigma: number
   impulseSpeed: number
+  propagation: number
   reset: number
+  restoring: number
   step: number
   target: FakeRenderTarget | null
   velocityDecay: number
@@ -102,6 +104,7 @@ function createRippleHarness(
   quality: GlassRippleQuality = 'balanced',
   compileAsync = vi.fn().mockResolvedValue(undefined),
   supportsHalfFloatTarget = true,
+  viewport = { height: 800, width: 1200 },
 ) {
   let currentTarget: FakeRenderTarget | null = null
   const snapshots: RenderSnapshot[] = []
@@ -128,7 +131,9 @@ function createRippleHarness(
         impulseOffset: uniforms.uImpulseOffset.value as number,
         impulseSigma: uniforms.uImpulseSigma.value as number,
         impulseSpeed: uniforms.uImpulseSpeed.value as number,
+        propagation: uniforms.uPropagation.value as number,
         reset: uniforms.uReset.value as number,
+        restoring: uniforms.uRestoring.value as number,
         step: uniforms.uStep.value as number,
         target: currentTarget,
         velocityDecay: uniforms.uVelocityDecay.value as number,
@@ -160,8 +165,8 @@ function createRippleHarness(
         quality,
         renderer: renderer as never,
         three,
-        viewportHeight: 800,
-        viewportWidth: 1200,
+        viewportHeight: viewport.height,
+        viewportWidth: viewport.width,
       }),
     renderer,
     snapshots,
@@ -347,10 +352,14 @@ describe('glass ripple dynamics', () => {
     dynamics.dispose()
   })
 
-  it('keeps the ripple footprint stable across quality levels', async () => {
-    const balancedHarness = createRippleHarness('balanced')
+  it.each([
+    { height: 800, width: 1200 },
+    { height: 1080, width: 2560 },
+    { height: 844, width: 390 },
+  ])('keeps ripple input and CSS-space propagation stable at $width x $height', async viewport => {
+    const balancedHarness = createRippleHarness('balanced', undefined, true, viewport)
     const balancedDynamics = await balancedHarness.create()
-    const highHarness = createRippleHarness('high')
+    const highHarness = createRippleHarness('high', undefined, true, viewport)
     const highDynamics = await highHarness.create()
     const interaction = {
       direction: { x: 1, y: 0 },
@@ -370,6 +379,49 @@ describe('glass ripple dynamics', () => {
 
     expect(balancedHarness.snapshots[0].impulseSigma).toBeCloseTo(86.4)
     expect(highHarness.snapshots[0].impulseSigma).toBeCloseTo(86.4)
+    const balancedTarget = balancedHarness.snapshots[0].target
+    const highTarget = highHarness.snapshots[0].target
+    expect(balancedTarget).not.toBeNull()
+    expect(highTarget).not.toBeNull()
+    const balancedPropagationMoment =
+      balancedHarness.snapshots[0].propagation *
+      (viewport.width / Math.max(balancedTarget?.width ?? 1, 1)) *
+      (viewport.height / Math.max(balancedTarget?.height ?? 1, 1)) *
+      1.84
+    const highPropagationMoment =
+      highHarness.snapshots[0].propagation *
+      (viewport.width / Math.max(highTarget?.width ?? 1, 1)) *
+      (viewport.height / Math.max(highTarget?.height ?? 1, 1)) *
+      2.66
+    expect(highPropagationMoment).toBeCloseTo(balancedPropagationMoment)
+    expect(highHarness.snapshots[0].restoring).toBe(balancedHarness.snapshots[0].restoring)
+    expect(highHarness.snapshots[0].velocityDecay).toBeCloseTo(balancedHarness.snapshots[0].velocityDecay)
+    balancedDynamics.dispose()
+    highDynamics.dispose()
+  })
+
+  it('keeps ripple lifetime semantics stable across quality levels', async () => {
+    const balancedHarness = createRippleHarness('balanced')
+    const balancedDynamics = await balancedHarness.create()
+    const highHarness = createRippleHarness('high')
+    const highDynamics = await highHarness.create()
+    const interaction = {
+      direction: { x: 1, y: 0 },
+      point: { x: 0.5, y: 0.5 },
+      speed: 0.5,
+      timestamp: 100,
+    }
+
+    balancedDynamics.setParameters(75, 50)
+    highDynamics.setParameters(75, 50)
+    balancedDynamics.inject(interaction)
+    highDynamics.inject(interaction)
+    expect(balancedDynamics.step(116.667)).toBe(true)
+    expect(highDynamics.step(116.667)).toBe(true)
+    expect(balancedDynamics.step(500)).toBe(true)
+    expect(highDynamics.step(500)).toBe(true)
+    expect(balancedDynamics.step(660)).toBe(false)
+    expect(highDynamics.step(660)).toBe(false)
     balancedDynamics.dispose()
     highDynamics.dispose()
   })

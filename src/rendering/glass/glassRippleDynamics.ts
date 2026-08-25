@@ -202,6 +202,9 @@ const FRESHNESS_MS = 40
 const ENVELOPE_THRESHOLD = 0.006
 const MAX_STEP_MS = 16.667
 const MIN_STEP_MS = 4
+const RESTORING_STRENGTH = 0.035
+const BALANCED_STENCIL_SECOND_MOMENT = 1.84
+const HIGH_STENCIL_SECOND_MOMENT = 2.66
 
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value))
@@ -265,7 +268,7 @@ export async function createGlassRippleDynamics(
     uPropagation: { value: 0.18 },
     uQuality: { value: quality === 'high' ? 1 : 0 },
     uReset: { value: 1 },
-    uRestoring: { value: quality === 'high' ? 0.028 : 0.035 },
+    uRestoring: { value: RESTORING_STRENGTH },
     uStep: { value: 1 },
     uTexelSize: { value: new three.Vector2(1, 1) },
     uVelocityDecay: { value: 1 },
@@ -303,9 +306,9 @@ export async function createGlassRippleDynamics(
     uniforms.uReset.value = 0
   }
 
-  const getTargetSize = (width: number, height: number) => {
+  const getTargetSize = (width: number, height: number, targetQuality = quality) => {
     const scale =
-      quality === 'high'
+      targetQuality === 'high'
         ? Math.min(1, Math.max(0.25, 192 / width, 128 / height))
         : Math.min(1, Math.max(0.16, 128 / width, 96 / height))
 
@@ -337,9 +340,9 @@ export async function createGlassRippleDynamics(
     return true
   }
 
-  const getVelocityHalfLife = () => (quality === 'high' ? mix(90, 280, flow) : mix(70, 220, flow))
+  const getVelocityHalfLife = () => mix(70, 220, flow)
 
-  const getDeadlineDuration = () => FRESHNESS_MS + (quality === 'high' ? mix(220, 920, flow) : mix(160, 680, flow))
+  const getDeadlineDuration = () => FRESHNESS_MS + mix(160, 680, flow)
 
   const settleEnvelope = (timestamp: number) => {
     if (!Number.isFinite(lastInputAt)) return 0
@@ -430,11 +433,17 @@ export async function createGlassRippleDynamics(
       const velocityHalfLife = getVelocityHalfLife()
       const heightHalfLife = velocityHalfLife * 0.82
       const energyHalfLife = velocityHalfLife * 0.72
-      const targetCssPerTexel = Math.sqrt(
-        (viewportWidth / Math.max(readTarget.width, 1)) * (viewportHeight / Math.max(readTarget.height, 1)),
-      )
-      const referenceCssPerTexel = quality === 'high' ? 4 : 6.25
-      const basePropagation = quality === 'high' ? mix(0.11, 0.16, translation) : mix(0.12, 0.18, translation)
+      const targetCssPerTexelSquared =
+        (viewportWidth / Math.max(readTarget.width, 1)) * (viewportHeight / Math.max(readTarget.height, 1))
+      const balancedTarget = getTargetSize(viewportWidth, viewportHeight, 'balanced')
+      const balancedCssPerTexelSquared =
+        (viewportWidth / Math.max(balancedTarget.width, 1)) * (viewportHeight / Math.max(balancedTarget.height, 1))
+      const stencilSecondMoment = quality === 'high' ? HIGH_STENCIL_SECOND_MOMENT : BALANCED_STENCIL_SECOND_MOMENT
+      const basePropagation = mix(0.12, 0.18, translation)
+      // 波场分辨率和邻域核不同；按 CSS 像素二阶矩归一后，质量档只改变采样细节而不改变波速。
+      const propagationScale =
+        (balancedCssPerTexelSquared * BALANCED_STENCIL_SECOND_MOMENT) /
+        Math.max(0.0001, targetCssPerTexelSquared * stencilSecondMoment)
 
       if (pendingImpulse > 0) {
         const directionLength = Math.hypot(pendingDirection.x, pendingDirection.y)
@@ -450,11 +459,8 @@ export async function createGlassRippleDynamics(
       uniforms.uImpulseSpeed.value = pendingSpeed
       // 质量档把额外预算用于场分辨率和衰减细节；输入范围保持稳定，避免高质量改变动态效果的空间语义。
       uniforms.uImpulseSigma.value = mix(54, 97.2, translation)
-      uniforms.uPropagation.value = Math.min(
-        0.18,
-        Math.max(0.08, basePropagation * (referenceCssPerTexel / targetCssPerTexel) ** 2),
-      )
-      uniforms.uRestoring.value = quality === 'high' ? 0.028 : 0.035
+      uniforms.uPropagation.value = Math.min(0.32, Math.max(0.08, basePropagation * propagationScale))
+      uniforms.uRestoring.value = RESTORING_STRENGTH
       uniforms.uStep.value = stepMs / MAX_STEP_MS
       uniforms.uVelocityDecay.value = 2 ** (-decayStepMs / velocityHalfLife)
       uniforms.uHeightDecay.value = 2 ** (-decayStepMs / heightHalfLife)

@@ -158,7 +158,7 @@ export const GLASS_FLUID_FRAGMENT_SURFACE_SHAPE = `    vec2 pointerDelta = uPoin
     vec2 pointerDeltaAspect = pointerDelta;
     pointerDeltaAspect *= uPresentationSize / max(uVisibleViewportSize.y, 1.0) * motionRangeCompression;
     // 三材质共享指针几何足迹；磨砂身份由位移幅度、低通扩散和材质合成表达。
-    float pointerSpread = mix(26.0, 17.0, uQuality);
+    float pointerSpread = 26.0;
     pointerSpread *= dynamicRangeDensity * mix(1.0, 0.46, uMotionExpansion);
     float sharedDirectionality = smoothstep(0.015, 0.18, trailSpatialSpan);
     float pointerAlong = dot(-pointerDeltaAspect, wakeDirection);
@@ -193,17 +193,17 @@ export const GLASS_FLUID_FRAGMENT_SURFACE_SHAPE = `    vec2 pointerDelta = uPoin
     float wakeAcross = dot(wakeDelta, wakePerpendicular);
     float wakeTravel =
       0.014 * dynamicRangeScale *
-      mix(0.82, 1.18, uQuality) *
+      0.82 *
       mix(1.0, 1.45, uMotionExpansion);
     float wakeWidth =
-      mix(0.027, 0.044, uQuality) * dynamicRangeScale * mix(1.0, 1.72, uMotionExpansion);
+      0.027 * dynamicRangeScale * mix(1.0, 1.72, uMotionExpansion);
     float wakeCoordinate = (wakeAlong + wakeTravel) / wakeWidth;
     float wakeShape = wakeCoordinate * exp(-0.5 * wakeCoordinate * wakeCoordinate);
     float wakeEnvelope =
       exp(
         -wakeAcross *
         wakeAcross *
-        mix(280.0, 145.0, uQuality) *
+        280.0 *
         dynamicRangeDensity *
         mix(1.0, 0.44, uMotionExpansion)
       );
@@ -211,7 +211,7 @@ export const GLASS_FLUID_FRAGMENT_SURFACE_SHAPE = `    vec2 pointerDelta = uPoin
       wakeDirection *
       wakeShape *
       wakeEnvelope *
-      mix(0.0045, 0.0075, uQuality) *
+      0.0045 *
       uMotion *
       uDeformationStrength *
       uFlowStrength;

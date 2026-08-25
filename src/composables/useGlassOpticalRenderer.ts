@@ -853,8 +853,7 @@ ${GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD}
   float rippleGradientLength = length(rippleGradient);
   float rippleGradientEnergy = smoothstep(0.003, 0.08, rippleGradientLength);
   // 半浮点高度场保留连续波前；真实梯度直接决定方向和幅度，不放大量化噪声。
-  vec2 rippleRefraction =
-    rippleGradient * mix(230.0, 335.0, uQuality) * uRippleDeformationStrength;
+  vec2 rippleRefraction = rippleGradient * 230.0 * uRippleDeformationStrength;
   rippleRefraction /= max(uPresentationSize, vec2(1.0));
   float frosted = step(1.5, uAppearance);
   float rippleAppearanceScale = uAppearance > 1.5 ? 1.25 : (uAppearance > 0.5 ? 0.86 : 0.72);

@@ -30,7 +30,6 @@ import {
   normalizeGlassOpticalStrength,
   reconcileGlassOpticalSurfaceSlots,
   selectGlassOpticalRects,
-  stepGlassOpticalSpring,
   type GlassOpticalRect,
 } from '@/utils/glassOptics'
 import { describe, expect, it } from 'vitest'
@@ -322,12 +321,10 @@ describe('glass optics geometry', () => {
       flowField: true,
       flowHalfLife: 130,
       maxRefractionPixels: 9,
-      motionDuration: 540,
-      motionHalfLife: 125,
+      motionDuration: 360,
+      motionHalfLife: 82,
       pixelRatioCap: 1.5,
-      pointerImmediateResponse: 0.58,
-      springDamping: 0.78,
-      springFrequency: 18,
+      pointerImmediateResponse: 0.7,
       textureLimit: 4096,
       textureSource: 'wallpaper',
       trailCount: 4,
@@ -339,12 +336,10 @@ describe('glass optics geometry', () => {
       flowField: true,
       flowHalfLife: 130,
       maxRefractionPixels: 9,
-      motionDuration: 540,
-      motionHalfLife: 125,
+      motionDuration: 360,
+      motionHalfLife: 82,
       pixelRatioCap: 1.5,
-      pointerImmediateResponse: 0.58,
-      springDamping: 0.78,
-      springFrequency: 18,
+      pointerImmediateResponse: 0.7,
       textureLimit: 4096,
       textureSource: 'wallpaper',
       trailCount: 4,
@@ -356,12 +351,10 @@ describe('glass optics geometry', () => {
       flowField: true,
       flowHalfLife: 130,
       maxRefractionPixels: 9,
-      motionDuration: 540,
-      motionHalfLife: 125,
+      motionDuration: 360,
+      motionHalfLife: 82,
       pixelRatioCap: 1.5,
-      pointerImmediateResponse: 0.58,
-      springDamping: 0.78,
-      springFrequency: 18,
+      pointerImmediateResponse: 0.7,
       textureLimit: 4096,
       textureSource: 'wallpaper',
       trailCount: 4,
@@ -377,8 +370,6 @@ describe('glass optics geometry', () => {
       motionHalfLife: 82,
       pixelRatioCap: 1,
       pointerImmediateResponse: 0.7,
-      springDamping: 0.9,
-      springFrequency: 24,
       textureLimit: 3072,
       textureSource: 'wallpaper',
       trailCount: 2,
@@ -390,12 +381,10 @@ describe('glass optics geometry', () => {
       flowField: true,
       flowHalfLife: 130,
       maxRefractionPixels: 9,
-      motionDuration: 540,
-      motionHalfLife: 125,
+      motionDuration: 360,
+      motionHalfLife: 82,
       pixelRatioCap: 1.5,
-      pointerImmediateResponse: 0.58,
-      springDamping: 0.78,
-      springFrequency: 18,
+      pointerImmediateResponse: 0.7,
       textureLimit: 4096,
       textureSource: 'auto',
       trailCount: 4,
@@ -420,7 +409,11 @@ describe('glass optics geometry', () => {
       maxRefractionPixels: 9,
       trailCount: 4,
     })
-    expect(high.motionDuration).toBeGreaterThan(balanced.motionDuration)
+    expect(high).toMatchObject({
+      motionDuration: balanced.motionDuration,
+      motionHalfLife: balanced.motionHalfLife,
+      pointerImmediateResponse: balanced.pointerImmediateResponse,
+    })
     expect(high.pixelRatioCap).toBeGreaterThan(balanced.pixelRatioCap)
   })
 
@@ -460,34 +453,6 @@ describe('glass optics geometry', () => {
     expect(getGlassOpticalWakeDirection({ x: 1, y: 0 }, { x: 0, y: 1 }, 0.04, false)).toEqual({ x: 0, y: 1 })
     expect(getGlassOpticalWakeDirection({ x: 1, y: 0 }, { x: 0, y: 1 }, 0.002, false)).toEqual({ x: 1, y: 0 })
     expect(getGlassOpticalWakeDirection({ x: 1, y: 0 }, { x: 0, y: 2 }, 0.04, true)).toEqual({ x: 0, y: 1 })
-  })
-
-  it('uses a frame-rate independent spring with at most one visible overshoot', () => {
-    const profile = getGlassOpticalRenderProfile('high', '/dashboard')
-    const simulate = (deltaMs: number) => {
-      let state = { position: 0, velocity: 0 }
-      const samples: number[] = []
-
-      for (let elapsed = 0; elapsed < profile.motionDuration; elapsed += deltaMs) {
-        state = stepGlassOpticalSpring(state, 1, deltaMs, profile.springFrequency, profile.springDamping)
-        samples.push(state.position)
-      }
-
-      return { samples, state }
-    }
-    const sixtyHertz = simulate(1000 / 60)
-    const oneTwentyHertz = simulate(1000 / 120)
-    const visibleCrossings = sixtyHertz.samples.slice(1).filter((sample, index) => {
-      const previousOffset = sixtyHertz.samples[index] - 1
-      const currentOffset = sample - 1
-
-      return previousOffset * currentOffset < 0 && Math.max(Math.abs(previousOffset), Math.abs(currentOffset)) > 0.002
-    })
-
-    expect(visibleCrossings.length).toBeLessThanOrEqual(1)
-    expect(Math.max(...sixtyHertz.samples)).toBeLessThan(1.04)
-    expect(sixtyHertz.state.position).toBeCloseTo(1, 2)
-    expect(sixtyHertz.state.position).toBeCloseTo(oneTwentyHertz.state.position, 3)
   })
 
   it('reconciles capped surface slots without reshuffling stable cards', () => {
