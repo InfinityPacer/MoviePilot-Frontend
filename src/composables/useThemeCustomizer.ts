@@ -123,7 +123,9 @@ type VuetifyThemeApi = ReturnType<typeof useTheme>
 
 const defaultPrimaryColor = themeCustomizerPrimaryColors[0].value
 const validGlassAppearances: ThemeCustomizerGlassAppearance[] = ['clear', 'tinted', 'frosted']
-const validGlassDynamicsModes: ThemeCustomizerGlassDynamicsMode[] = ['fluid', 'ripple', 'vortex', 'off']
+// Ripple remains an internal renderer value for backwards-compatible shader tests;
+// it is no longer a user-selectable setting and legacy storage is migrated to Fluid.
+const validGlassDynamicsModes: ThemeCustomizerGlassDynamicsMode[] = ['fluid', 'vortex', 'off']
 const validGlassPresets: GlassOpticalPreset[] = ['natural', 'glide', 'liquid']
 const validGlassQualities: ThemeCustomizerGlassQuality[] = ['css', 'balanced', 'high']
 const defaultGlassQuality: ThemeCustomizerGlassQuality = 'balanced'
@@ -184,7 +186,7 @@ export function getDefaultGlassCustomizerSettings(
   return {
     glassAppearance: 'clear',
     glassDeformationStrength: glassParameters.deformation,
-    glassDynamicsMode: 'ripple',
+    glassDynamicsMode: 'fluid',
     glassFlowStrength: glassParameters.flow,
     glassPreset: 'natural',
     glassPresetOverrides: {},
@@ -296,9 +298,12 @@ function normalizeThemeCustomizerSettings(
       settings.glassMotionStrength,
       fallback.glassDeformationStrength,
     ),
-    glassDynamicsMode: validGlassDynamicsModes.includes(settings.glassDynamicsMode as ThemeCustomizerGlassDynamicsMode)
-      ? (settings.glassDynamicsMode as ThemeCustomizerGlassDynamicsMode)
-      : fallback.glassDynamicsMode,
+    glassDynamicsMode:
+      settings.glassDynamicsMode === 'ripple'
+        ? 'fluid'
+        : validGlassDynamicsModes.includes(settings.glassDynamicsMode as ThemeCustomizerGlassDynamicsMode)
+          ? (settings.glassDynamicsMode as ThemeCustomizerGlassDynamicsMode)
+          : fallback.glassDynamicsMode,
     glassFlowStrength: normalizeMigratedGlassStrength(
       settings.glassFlowStrength,
       settings.glassMotionStrength,
