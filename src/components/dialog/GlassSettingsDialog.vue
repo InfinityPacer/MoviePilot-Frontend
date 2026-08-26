@@ -130,6 +130,7 @@ const dynamicsModeOptions: Array<{
   value: ThemeCustomizerGlassDynamicsMode
 }> = [
   { hint: 'theme.glassDynamicsModeFluidHint', label: 'theme.glassDynamicsModeFluid', value: 'fluid' },
+  { hint: 'theme.glassDynamicsModeRippleHint', label: 'theme.glassDynamicsModeRipple', value: 'ripple' },
   { hint: 'theme.glassDynamicsModeVortexHint', label: 'theme.glassDynamicsModeVortex', value: 'vortex' },
   { hint: 'theme.glassDynamicsModeOffHint', label: 'theme.glassDynamicsModeOff', value: 'off' },
 ]

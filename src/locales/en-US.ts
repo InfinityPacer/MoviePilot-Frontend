@@ -235,9 +235,11 @@ export default {
     glassPresetHint: 'Natural stays balanced, Glide favors smooth movement, and Liquid adds deformation and inertia.',
     glassDynamicsMode: 'Motion Effect',
     glassDynamicsModeFluid: 'Fluid',
+    glassDynamicsModeRipple: 'Ripple',
     glassDynamicsModeVortex: 'Vortex',
     glassDynamicsModeOff: 'Off',
     glassDynamicsModeFluidHint: 'Creates continuous flow and refraction that follow the pointer.',
+    glassDynamicsModeRippleHint: 'Creates ripples that spread across nearby glass surfaces as the pointer moves.',
     glassDynamicsModeVortexHint:
       'Creates local rotation around the pointer with a decaying refractive wake along its path.',
     glassDynamicsModeOffHint: 'Keeps the static material without pointer-driven motion.',
