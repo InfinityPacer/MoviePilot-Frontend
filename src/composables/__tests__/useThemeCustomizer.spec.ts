@@ -114,11 +114,14 @@ describe('useThemeCustomizer glass settings', () => {
     expect(readThemeCustomizerSettings().glassAppearance).toBe(glassAppearance)
   })
 
-  it.each(['fluid', 'ripple', 'off'] as const)('preserves the %s dynamics mode contract', glassDynamicsMode => {
-    localStorage.setItem(THEME_CUSTOMIZER_STORAGE_KEY, JSON.stringify({ glassDynamicsMode }))
+  it.each(['fluid', 'ripple', 'vortex', 'off'] as const)(
+    'preserves the %s dynamics mode contract',
+    glassDynamicsMode => {
+      localStorage.setItem(THEME_CUSTOMIZER_STORAGE_KEY, JSON.stringify({ glassDynamicsMode }))
 
-    expect(readThemeCustomizerSettings().glassDynamicsMode).toBe(glassDynamicsMode)
-  })
+      expect(readThemeCustomizerSettings().glassDynamicsMode).toBe(glassDynamicsMode)
+    },
+  )
 
   it('falls back when stored glass settings are invalid', () => {
     localStorage.setItem(

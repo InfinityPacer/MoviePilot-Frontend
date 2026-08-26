@@ -73,7 +73,7 @@ export const themeCustomizerShadowLevels = [
 export type ThemeCustomizerLayout = 'collapsed' | 'horizontal' | 'vertical'
 export type ThemeCustomizerGlassAppearance = 'clear' | 'frosted' | 'tinted'
 /** 玻璃动态效果的持久化选择；关闭模式仍保留用户配置的动态参数。 */
-export type ThemeCustomizerGlassDynamicsMode = 'fluid' | 'ripple' | 'off'
+export type ThemeCustomizerGlassDynamicsMode = 'fluid' | 'ripple' | 'vortex' | 'off'
 export type ThemeCustomizerGlassQuality = 'balanced' | 'css' | 'high'
 export type ThemeCustomizerRadius = 'default' | 'extra' | 'large' | 'none' | 'small'
 export type ThemeCustomizerShadow = (typeof themeCustomizerShadowLevels)[number]
@@ -123,7 +123,7 @@ type VuetifyThemeApi = ReturnType<typeof useTheme>
 
 const defaultPrimaryColor = themeCustomizerPrimaryColors[0].value
 const validGlassAppearances: ThemeCustomizerGlassAppearance[] = ['clear', 'tinted', 'frosted']
-const validGlassDynamicsModes: ThemeCustomizerGlassDynamicsMode[] = ['fluid', 'ripple', 'off']
+const validGlassDynamicsModes: ThemeCustomizerGlassDynamicsMode[] = ['fluid', 'ripple', 'vortex', 'off']
 const validGlassPresets: GlassOpticalPreset[] = ['natural', 'glide', 'liquid']
 const validGlassQualities: ThemeCustomizerGlassQuality[] = ['css', 'balanced', 'high']
 const defaultGlassQuality: ThemeCustomizerGlassQuality = 'balanced'

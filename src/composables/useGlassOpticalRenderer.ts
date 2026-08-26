@@ -60,6 +60,7 @@ import {
   GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD,
   type GlassFluidDynamics,
 } from '@/rendering/glass/glassFluidDynamics'
+import { GLASS_VORTEX_FRAGMENT_FIELD } from '@/rendering/glass/glassVortexDynamics'
 import type { PagePresentationMotionReader } from '@/composables/usePagePresentationMotion'
 import { APP_ACTIVITY_SUSPEND_DELAY_MS } from '@/utils/appActivityLifecycle'
 import {
@@ -811,6 +812,8 @@ void main() {
   float mask = 0.0;
   float edge = 0.0;
   float caustic = 0.0;
+  float vortexSignature = 0.0;
+  float vortexShadowSignature = 0.0;
   float directionalReflection = 0.0;
   float topPrism = 0.0;
   float backlightAbsorption = 0.0;
@@ -820,6 +823,9 @@ void main() {
   float surfaceDispersion = 0.0;
   vec2 staticRefraction = vec2(0.0);
   vec2 dynamicRefraction = vec2(0.0);
+  float fluidMode = 1.0 - step(0.5, uDynamicsMode);
+  float rippleMode = step(0.5, uDynamicsMode) * (1.0 - step(1.5, uDynamicsMode));
+  float vortexMode = step(2.5, uDynamicsMode) * (1.0 - step(3.5, uDynamicsMode));
 ${GLASS_FLUID_FRAGMENT_SETUP}
   float interactionMask = uInteractionRectCount > 0 ? 0.0 : 1.0;
   for (int interactionIndex = 0; interactionIndex < 8; interactionIndex++) {
@@ -838,7 +844,7 @@ ${GLASS_FLUID_FRAGMENT_SETUP}
   }
 
 ${GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD}
-  float rippleMode = step(0.5, uDynamicsMode) * (1.0 - step(1.5, uDynamicsMode));
+${GLASS_VORTEX_FRAGMENT_FIELD}
   vec3 rippleState = vec3(0.0);
   vec2 rippleGradient = vec2(0.0);
   if (rippleMode > 0.5 && uHasRippleTexture > 0.5) {
@@ -891,9 +897,17 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_SHAPE}
 ${GLASS_FLUID_FRAGMENT_SURFACE_OPTICS}
     staticRefraction += lens * staticLens * mix(1.0, 0.72, frosted) * rectMask * surfaceDynamic;
 ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
+    dynamicRefraction += vortexRefraction * vortexMode * rectMask * surfaceDynamic * interactionMask;
     dynamicRefraction += rippleRefraction * rippleMode * rectMask * surfaceDynamic * interactionMask;
     edge = max(edge, edgeResponse * rectMask * surfaceDynamic);
     caustic = max(caustic, localCaustic);
+    float localVortexSignature = vortexCaustic * vortexMode * rectMask * surfaceDynamic * interactionMask;
+    caustic = max(caustic, localVortexSignature);
+    vortexSignature = max(vortexSignature, localVortexSignature);
+    vortexShadowSignature = max(
+      vortexShadowSignature,
+      vortexShadow * vortexMode * rectMask * surfaceDynamic * interactionMask
+    );
     caustic = max(
       caustic,
       rippleGradientEnergy * rippleState.z * rippleMode * rectMask * surfaceDynamic * interactionMask
@@ -901,14 +915,20 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
     directionalReflection = max(directionalReflection, localDirectionalReflection);
     topPrism = max(topPrism, localTopPrism);
     backlightAbsorption = max(backlightAbsorption, localBacklightAbsorption);
-    materialEnergy = max(materialEnergy, liquidEnergy * rectMask * surfaceDynamic * interactionMask);
+    materialEnergy = max(
+      materialEnergy,
+      max(liquidEnergy * fluidMode, vortexEnergy * vortexMode) *
+        rectMask *
+        surfaceDynamic *
+        interactionMask
+    );
     materialEnergy = max(
       materialEnergy,
       rippleState.z * rippleMode * rectMask * surfaceDynamic * interactionMask
     );
     sharedMotionPresence = max(
       sharedMotionPresence,
-      sharedWaveEnergy * rectMask * surfaceDynamic * interactionMask
+      sharedWaveEnergy * fluidMode * rectMask * surfaceDynamic * interactionMask
     );
     dynamicMask = max(dynamicMask, rectMask * surfaceDynamic * interactionMask);
     mask = max(mask, rectMask);
@@ -1029,8 +1049,10 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
   float absorption =
     clamp(backlightAbsorption * mix(0.035, 0.075, frosted) * uReflectionStrength, 0.0, 0.14);
   refracted *= 1.0 - absorption;
+  refracted *= 1.0 - vortexShadowSignature * 0.16;
   refracted = mix(refracted, highlight, reflectionMix);
   refracted += highlight * caustic * causticHighlightMix * uReflectionStrength * highlightBudget;
+  refracted += highlight * vortexSignature * 0.16 * uReflectionStrength * highlightBudget;
 
   if (uDynamicsOnly > 0.5) {
     float dynamicsPresence = max(
@@ -1720,12 +1742,11 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     resources.uniforms.uRippleTexelSize.value.set(1, 1)
   }
 
-  /** 根据当前质量档创建或释放共享 renderer 内的液态位移场。 */
+  /** High Fluid 与 Vortex 共享同一时序位移场；Balanced Vortex 保持解析式。 */
   function syncFluidDynamics() {
     if (!resources || !three) return
 
-    const profile = getRenderProfile()
-    if (!hasFluidCapability() || !profile.flowField) {
+    if (!requiresTemporalFlowField()) {
       disposeFluidDynamics()
       return
     }
@@ -1801,18 +1822,18 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
 
     const mode = getDynamicsMode()
     resources.uniforms.uDynamicsMode.value = getDynamicsModeUniformValue()
-    resources.uniforms.uTranslationStrength.value = mode === 'fluid' ? getTranslationStrengthScale() : 0
-    resources.uniforms.uDeformationStrength.value = mode === 'fluid' ? getDeformationStrengthScale() : 0
-    resources.uniforms.uFlowStrength.value = mode === 'fluid' ? getFlowStrengthScale() : 0
-    resources.uniforms.uMotionExpansion.value = mode === 'fluid' ? getMotionExpansion() : 0
+    resources.uniforms.uTranslationStrength.value = hasAnalyticMotionMode() ? getTranslationStrengthScale() : 0
+    resources.uniforms.uDeformationStrength.value = hasAnalyticMotionMode() ? getDeformationStrengthScale() : 0
+    resources.uniforms.uFlowStrength.value = hasAnalyticMotionMode() ? getFlowStrengthScale() : 0
+    resources.uniforms.uMotionExpansion.value = hasAnalyticMotionMode() ? getMotionExpansion() : 0
     resources.uniforms.uMaxRefractionPixels.value = getMaxRefractionPixels()
     resources.uniforms.uRippleDeformationStrength.value =
       mode === 'ripple'
         ? Math.min(1, Math.max(0, toValue(options.deformationStrength ?? getLegacyDynamicStrength()) / 100))
         : 0
-    resources.uniforms.uTrailCount.value = mode === 'fluid' ? getRenderProfile().trailCount : 0
+    resources.uniforms.uTrailCount.value = hasAnalyticMotionMode() ? getRenderProfile().trailCount : 0
 
-    if (mode === 'fluid') {
+    if (mode === 'fluid' || mode === 'vortex') {
       disposeRippleResources()
       syncFluidDynamics()
     } else if (mode === 'ripple') {
@@ -2392,8 +2413,20 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     return getDynamicsMode() !== 'off'
   }
 
-  function hasFluidCapability() {
+  function hasFluidMode() {
     return getDynamicsMode() === 'fluid'
+  }
+
+  function hasVortexMode() {
+    return getDynamicsMode() === 'vortex'
+  }
+
+  function hasAnalyticMotionMode() {
+    return hasFluidMode() || hasVortexMode()
+  }
+
+  function requiresTemporalFlowField() {
+    return hasAnalyticMotionMode() && getRenderProfile().flowField
   }
 
   function hasRippleCapability() {
@@ -2403,29 +2436,29 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
   function getDynamicsModeUniformValue() {
     const mode = getDynamicsMode()
 
-    return mode === 'fluid' ? 0 : mode === 'ripple' ? 1 : 2
+    return mode === 'fluid' ? 0 : mode === 'ripple' ? 1 : mode === 'vortex' ? 3 : 2
   }
 
   function getTranslationStrengthScale() {
-    if (!hasFluidCapability()) return 0
+    if (!hasAnalyticMotionMode()) return 0
 
     return getGlassOpticalTranslationStrengthScale(toValue(options.translationStrength ?? getLegacyDynamicStrength()))
   }
 
   function getDeformationStrengthScale() {
-    if (!hasFluidCapability()) return 0
+    if (!hasAnalyticMotionMode()) return 0
 
     return getGlassOpticalDeformationStrengthScale(toValue(options.deformationStrength ?? getLegacyDynamicStrength()))
   }
 
   function getFlowStrengthScale() {
-    if (!hasFluidCapability()) return 0
+    if (!hasAnalyticMotionMode()) return 0
 
     return getGlassOpticalFlowStrengthScale(toValue(options.flowStrength ?? getLegacyDynamicStrength()))
   }
 
   function getMotionExpansion() {
-    if (!hasFluidCapability()) return 0
+    if (!hasAnalyticMotionMode()) return 0
 
     return getGlassOpticalMotionExpansion(toValue(options.flowStrength ?? getLegacyDynamicStrength()))
   }
@@ -2532,7 +2565,8 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
 
   /** 折叠的交互卡片不占用材质槽，但动态反馈仍应限制在其真实圆角边界内。 */
   function findInteractionTarget(x: number, y: number) {
-    if (availableSurfaces.length === 0) updateSurfaceUniforms()
+    // 输入探测允许同步刷新表面，但无命中时不得为一张空画面安排绘制帧。
+    if (availableSurfaces.length === 0) updateSurfaceUniforms(performance.now(), false)
 
     const surface = availableSurfaces.find(
       candidate => isGlassOpticalElementEligible(candidate.key) && rectContainsPoint(candidate.rect, x, y),
@@ -2684,7 +2718,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
       animationFrame = requestAnimationFrame(renderInteractionFrame)
       return
     }
-    if (!hasFluidCapability()) {
+    if (!hasAnalyticMotionMode()) {
       resetInteractionState()
       renderFrame(timestamp, false)
       interactionAnimating = false
@@ -3077,6 +3111,13 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
 
       await nextTick()
       if (version !== resumeVersion || !canResume()) return
+      if (contextRecoveryPending) {
+        contextRecoveryPending = false
+        contextRecoveryCanvas?.removeEventListener('webglcontextrestored', handleContextRestored)
+        contextRecoveryCanvas = null
+        await initializeRenderer(false)
+        return
+      }
       if (!resources) {
         await initializeRenderer()
         return
@@ -3150,9 +3191,12 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
   function handleContextRestored() {
     if (!contextRecoveryPending) return
 
-    contextRecoveryPending = false
     contextRecoveryCanvas?.removeEventListener('webglcontextrestored', handleContextRestored)
     contextRecoveryCanvas = null
+    // 浏览器可在后台恢复 context；保持 fallback，等页面重新可见后再重建 GPU 资源。
+    if (document.visibilityState === 'hidden' || !toValue(options.active)) return
+
+    contextRecoveryPending = false
     void initializeRenderer(false)
   }
 
@@ -3963,7 +4007,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
         },
         uTranslationStrength: { value: getTranslationStrengthScale() },
         uTrail: { value: Array.from({ length: 4 }, () => new Vector4Class(0.5, 0.5, 0, 0)) },
-        uTrailCount: { value: hasFluidCapability() ? getRenderProfile().trailCount : 0 },
+        uTrailCount: { value: hasAnalyticMotionMode() ? getRenderProfile().trailCount : 0 },
         uVisibleViewportSize: { value: new three.Vector2(window.innerWidth, window.innerHeight) },
         uScrollOffset: { value: new three.Vector2(0, 0) },
         uWakeDirection: { value: new three.Vector2(0, -1) },
@@ -4054,7 +4098,14 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
 
       if (!resources) {
         await nextTick()
-        await initializeRenderer()
+        if (contextRecoveryPending) {
+          contextRecoveryPending = false
+          contextRecoveryCanvas?.removeEventListener('webglcontextrestored', handleContextRestored)
+          contextRecoveryCanvas = null
+          await initializeRenderer(false)
+        } else {
+          await initializeRenderer()
+        }
       }
     },
     { immediate: true },
@@ -4147,7 +4198,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
 
         resources.uniforms.uMaxRefractionPixels.value = getMaxRefractionPixels()
         resources.uniforms.uQuality.value = quality === 'high' ? 1 : 0
-        resources.uniforms.uTrailCount.value = hasFluidCapability() ? nextProfile.trailCount : 0
+        resources.uniforms.uTrailCount.value = hasAnalyticMotionMode() ? nextProfile.trailCount : 0
         interactionAnimating = false
         cancelScheduledFrame()
         resetInteractionState()
@@ -4213,15 +4264,17 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     ]) => {
       if (!resources) return
 
-      const fluidActive = hasFluidCapability()
-      resources.uniforms.uTranslationStrength.value = fluidActive
+      const analyticMotionActive = hasAnalyticMotionMode()
+      resources.uniforms.uTranslationStrength.value = analyticMotionActive
         ? getGlassOpticalTranslationStrengthScale(translationStrength)
         : 0
-      resources.uniforms.uDeformationStrength.value = fluidActive
+      resources.uniforms.uDeformationStrength.value = analyticMotionActive
         ? getGlassOpticalDeformationStrengthScale(deformationStrength)
         : 0
-      resources.uniforms.uFlowStrength.value = fluidActive ? getGlassOpticalFlowStrengthScale(flowStrength) : 0
-      resources.uniforms.uMotionExpansion.value = fluidActive ? getGlassOpticalMotionExpansion(flowStrength) : 0
+      resources.uniforms.uFlowStrength.value = analyticMotionActive ? getGlassOpticalFlowStrengthScale(flowStrength) : 0
+      resources.uniforms.uMotionExpansion.value = analyticMotionActive
+        ? getGlassOpticalMotionExpansion(flowStrength)
+        : 0
       resources.uniforms.uMaxRefractionPixels.value = getMaxRefractionPixels()
       resources.uniforms.uRippleDeformationStrength.value = hasRippleCapability()
         ? Math.min(1, Math.max(0, deformationStrength / 100))
@@ -4234,7 +4287,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
       resources.uniforms.uSurfaceDensity.value = materialResponse.surfaceDensity
       resources.uniforms.uTintDensity.value = materialResponse.tintDensity
       resources.uniforms.uTransmissionStrength.value = getGlassOpticalTransmissionStrength(transmissionStrength)
-      if (fluidActive && resources.uniforms.uFlowStrength.value <= 0 && interactionAnimating) {
+      if (analyticMotionActive && resources.uniforms.uFlowStrength.value <= 0 && interactionAnimating) {
         interactionAnimating = false
         cancelScheduledFrame()
         pendingFlowInjection = 0

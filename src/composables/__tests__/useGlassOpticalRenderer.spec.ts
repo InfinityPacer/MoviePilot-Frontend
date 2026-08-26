@@ -2706,6 +2706,62 @@ describe('glass optical surface discovery', () => {
     scope.stop()
   })
 
+  it('does not schedule or render for custom pointermove without a visible surface', async () => {
+    const three = await import('three')
+    const callbacks = new Map<number, FrameRequestCallback>()
+    let frameId = 0
+    const interactionListener = { current: null as ((event: PointerEvent | TouchEvent) => void) | null }
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frameId += 1
+      callbacks.set(frameId, callback)
+
+      return frameId
+    })
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => callbacks.delete(id))
+    const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
+    const scope = effectScope()
+    const renderer = scope.run(() =>
+      useGlassOpticalRenderer({
+        active: ref(true),
+        appearance: ref('clear'),
+        canvas: ref(document.createElement('canvas')),
+        dynamicsMode: ref('vortex'),
+        interactionSource: {
+          subscribe: vi.fn((_space, listener) => {
+            interactionListener.current = listener
+
+            return vi.fn()
+          }),
+        },
+        quality: ref('balanced'),
+        routeKey: ref('/dashboard'),
+        surfaceSpace: 'scroll',
+        tintColor: ref('#8D51F9'),
+        wallpaperUrl: ref('https://example.com/wallpaper.jpg'),
+      }),
+    )
+
+    await vi.waitFor(() => expect(renderer?.state.value).toBe('ready'))
+    callbacks.clear()
+    render.mockClear()
+    const renderedFrames = renderer?.renderedFrames.value
+
+    const dispatchInteraction = interactionListener.current
+    if (!dispatchInteraction) throw new Error('Expected the custom interaction listener to be registered')
+    dispatchInteraction({
+      clientX: 180,
+      clientY: 160,
+      pointerType: 'mouse',
+      timeStamp: 100,
+      type: 'pointermove',
+    } as PointerEvent)
+
+    expect(callbacks.size).toBe(0)
+    expect(render).not.toHaveBeenCalled()
+    expect(renderer?.renderedFrames.value).toBe(renderedFrames)
+    scope.stop()
+  })
+
   it('restores a temporarily collapsed interaction clip without rebuilding registry membership', async () => {
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1200)
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800)
@@ -2792,6 +2848,48 @@ describe('glass optical surface discovery', () => {
 
     expect(renderer?.state.value).toBe('ready')
     expect(rendererDispose).not.toHaveBeenCalled()
+    scope.stop()
+  })
+
+  it('defers context restoration while hidden until the renderer becomes visible', async () => {
+    const three = await import('three')
+    const canvas = document.createElement('canvas')
+    let visibilityState: DocumentVisibilityState = 'visible'
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState)
+    const compileAsync = vi.spyOn(three.WebGLRenderer.prototype, 'compileAsync')
+    const scope = effectScope()
+    const renderer = scope.run(() =>
+      useGlassOpticalRenderer({
+        active: ref(true),
+        appearance: ref('clear'),
+        canvas: ref(canvas),
+        dynamicsMode: ref('vortex'),
+        quality: ref('balanced'),
+        routeKey: ref('/dashboard'),
+        tintColor: ref('#8D51F9'),
+        wallpaperUrl: ref('https://example.com/wallpaper.jpg'),
+      }),
+    )
+
+    await vi.waitFor(() => expect(renderer?.state.value).toBe('ready'))
+    const compileCallsBeforeLoss = compileAsync.mock.calls.length
+
+    visibilityState = 'hidden'
+    document.dispatchEvent(new Event('visibilitychange'))
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }))
+    expect(renderer?.state.value).toBe('fallback')
+
+    canvas.dispatchEvent(new Event('webglcontextrestored'))
+    await nextTick()
+    await Promise.resolve()
+
+    expect(renderer?.state.value).toBe('fallback')
+    expect(compileAsync).toHaveBeenCalledTimes(compileCallsBeforeLoss)
+
+    visibilityState = 'visible'
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(renderer?.state.value).toBe('ready'))
+    expect(compileAsync).toHaveBeenCalledTimes(compileCallsBeforeLoss + 1)
     scope.stop()
   })
 
@@ -3206,7 +3304,7 @@ describe('glass optical surface discovery', () => {
   it('keeps off mode static, unsubscribed and reversible without changing material rendering', async () => {
     const three = await import('three')
     const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
-    const dynamicsMode = ref<'fluid' | 'off' | 'ripple'>('off')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('off')
     const unsubscribe = vi.fn()
     const interactionSource = {
       subscribe: vi.fn(() => unsubscribe),
@@ -3270,7 +3368,7 @@ describe('glass optical surface discovery', () => {
   it('preserves the baseline first fluid velocity but suppresses the first velocity after a mode reset', async () => {
     const three = await import('three')
     const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
-    const dynamicsMode = ref<'fluid' | 'off' | 'ripple'>('fluid')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('fluid')
     const surface = appendOpticalSurface('app-hover-lift-card', { height: 320, width: 520, x: 40, y: 80 })
     const scope = effectScope()
     const renderer = scope.run(() =>
@@ -3311,7 +3409,7 @@ describe('glass optical surface discovery', () => {
     const three = await import('three')
     const compileAsync = vi.spyOn(three.WebGLRenderer.prototype, 'compileAsync')
     const disposeTarget = vi.spyOn(three.WebGLRenderTarget.prototype, 'dispose')
-    const dynamicsMode = ref<'fluid' | 'off' | 'ripple'>('fluid')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('fluid')
     const scope = effectScope()
     const renderer = scope.run(() =>
       useGlassOpticalRenderer({
@@ -3348,7 +3446,7 @@ describe('glass optical surface discovery', () => {
     const three = await import('three')
     const compileAsync = vi.spyOn(three.WebGLRenderer.prototype, 'compileAsync')
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const dynamicsMode = ref<'fluid' | 'off' | 'ripple'>('off')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('off')
     const scope = effectScope()
     const renderer = scope.run(() =>
       useGlassOpticalRenderer({
@@ -3387,7 +3485,7 @@ describe('glass optical surface discovery', () => {
     const compileAsync = vi.spyOn(three.WebGLRenderer.prototype, 'compileAsync')
     const disposeTarget = vi.spyOn(three.WebGLRenderTarget.prototype, 'dispose')
     const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
-    const dynamicsMode = ref<'fluid' | 'off' | 'ripple'>('off')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('off')
     const scope = effectScope()
     const renderer = scope.run(() =>
       useGlassOpticalRenderer({
@@ -3439,7 +3537,7 @@ describe('glass optical surface discovery', () => {
     let rejectCompilation: ((error: Error) => void) | null = null
     const compileAsync = vi.spyOn(three.WebGLRenderer.prototype, 'compileAsync')
     const disposeTarget = vi.spyOn(three.WebGLRenderTarget.prototype, 'dispose')
-    const dynamicsMode = ref<'fluid' | 'off' | 'ripple'>('off')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('off')
     const scope = effectScope()
     const renderer = scope.run(() =>
       useGlassOpticalRenderer({
@@ -3587,7 +3685,7 @@ describe('glass optical surface discovery', () => {
     const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
     const unsubscribe = vi.fn()
     const subscribe = vi.fn(() => unsubscribe)
-    const dynamicsMode = ref<'fluid' | 'off' | 'ripple'>('ripple')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('ripple')
     const scope = effectScope()
     const renderer = scope.run(() =>
       useGlassOpticalRenderer({
@@ -4643,7 +4741,7 @@ describe('glass optical surface discovery', () => {
 
     expect(scene.children[0].material.fragmentShader).not.toContain('clamp(uMotion +')
     expect(scene.children[0].material.fragmentShader).toContain(
-      'materialEnergy = max(materialEnergy, liquidEnergy * rectMask * surfaceDynamic * interactionMask)',
+      'max(liquidEnergy * fluidMode, vortexEnergy * vortexMode)',
     )
     expect(scene.children[0].material.fragmentShader).toContain('uniform vec4 uInteractionRects[8]')
     expect(scene.children[0].material.fragmentShader).toContain('softLimitDynamicRefraction')
@@ -4684,7 +4782,7 @@ describe('glass optical surface discovery', () => {
     expect(scene.children[0].material.fragmentShader).toContain('uniform float uFlowStrength')
     expect(scene.children[0].material.fragmentShader).toContain('uniform float uReflectionStrength')
     expect(scene.children[0].material.fragmentShader).not.toContain('uWakeProgress')
-    expect(scene.children[0].material.fragmentShader).not.toContain('temporalEnergy')
+    expect(scene.children[0].material.fragmentShader).toContain('texture2D(uFlowTexture, vUv).z')
     expect(scene.children[0].material.fragmentShader).toContain('const float dynamicRangeScale = 0.52')
     expect(scene.children[0].material.fragmentShader).toContain('const float dynamicRangeDensity = 3.698')
     expect(scene.children[0].material.fragmentShader).toContain('float pointerSpread = 26.0')
@@ -4735,6 +4833,12 @@ describe('glass optical surface discovery', () => {
     expect(scene.children[0].material.fragmentShader).toContain(
       'causticHighlightMix * uReflectionStrength * highlightBudget',
     )
+    expect(scene.children[0].material.fragmentShader).toContain('float vortexSignature = 0.0')
+    expect(scene.children[0].material.fragmentShader).toContain('float vortexShadowSignature = 0.0')
+    expect(scene.children[0].material.fragmentShader).toContain(
+      'highlight * vortexSignature * 0.16 * uReflectionStrength * highlightBudget',
+    )
+    expect(scene.children[0].material.fragmentShader).toContain('refracted *= 1.0 - vortexShadowSignature * 0.16')
     expect(scene.children[0].material.fragmentShader).not.toContain('materialAlpha = uBackgroundVisibility * mix(')
     expect(scene.children[0].material.fragmentShader).not.toContain('mix(0.035, 0.4')
     expect(scene.children[0].material.fragmentShader).not.toContain('sin(')
@@ -4901,12 +5005,125 @@ describe('glass optical surface discovery', () => {
     scope.stop()
   })
 
+  it('keeps balanced vortex analytic and reuses the high temporal field across fluid switches', async () => {
+    const three = await import('three')
+    const disposeTarget = vi.spyOn(three.WebGLRenderTarget.prototype, 'dispose')
+    const setTargetSize = vi.spyOn(three.WebGLRenderTarget.prototype, 'setSize')
+    const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('vortex')
+    const quality = ref<'balanced' | 'high'>('balanced')
+    appendOpticalSurface('app-hover-lift-card', { height: 240, width: 320, x: 20, y: 80 })
+    const scope = effectScope()
+    const renderer = scope.run(() =>
+      useGlassOpticalRenderer({
+        active: ref(true),
+        appearance: ref('clear'),
+        canvas: ref(document.createElement('canvas')),
+        dynamicsMode,
+        quality,
+        routeKey: ref('/dashboard'),
+        surfaceSpace: 'scroll',
+        tintColor: ref('#8D51F9'),
+        wallpaperUrl: ref('https://example.com/wallpaper.jpg'),
+      }),
+    )
+
+    await vi.waitFor(() => expect(renderer?.state.value).toBe('ready'))
+    const scene = render.mock.calls
+      .map(call => call[0] as unknown as { children: Array<{ material?: ShaderMaterial }> })
+      .find(candidate => candidate.children[0]?.material?.uniforms.uDynamicsMode)
+    if (!scene) throw new Error('main optical scene was not rendered')
+    const uniforms = scene.children[0].material!.uniforms
+
+    expect(uniforms.uDynamicsMode.value).toBe(3)
+    expect(uniforms.uHasFlowTexture.value).toBe(0)
+    expect(uniforms.uHasRippleTexture.value).toBe(0)
+
+    quality.value = 'high'
+    await vi.waitFor(() => expect(uniforms.uHasFlowTexture.value).toBe(1))
+    const highFieldResizeCalls = setTargetSize.mock.calls.length
+    const highFieldDisposeCalls = disposeTarget.mock.calls.length
+
+    dynamicsMode.value = 'fluid'
+    await vi.waitFor(() => expect(uniforms.uDynamicsMode.value).toBe(0))
+    dynamicsMode.value = 'vortex'
+    await vi.waitFor(() => expect(uniforms.uDynamicsMode.value).toBe(3))
+    expect(uniforms.uHasFlowTexture.value).toBe(1)
+    expect(setTargetSize).toHaveBeenCalledTimes(highFieldResizeCalls)
+    expect(disposeTarget).toHaveBeenCalledTimes(highFieldDisposeCalls)
+
+    quality.value = 'balanced'
+    await vi.waitFor(() => expect(uniforms.uHasFlowTexture.value).toBe(0))
+    expect(disposeTarget).toHaveBeenCalledTimes(highFieldDisposeCalls + 2)
+    scope.stop()
+  })
+
+  it.each([
+    ['balanced', 1],
+    ['high', 2],
+  ] as const)(
+    'renders one shared vortex pass at %s quality with no extra composition pass',
+    async (quality, passes) => {
+      const three = await import('three')
+      const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
+      const callbacks = new Map<number, FrameRequestCallback>()
+      let frameId = 0
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+        frameId += 1
+        callbacks.set(frameId, callback)
+
+        return frameId
+      })
+      vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => {
+        callbacks.delete(id)
+      })
+      appendOpticalSurface('app-hover-lift-card', { height: 240, width: 320, x: 20, y: 80 })
+      const scope = effectScope()
+      const renderer = scope.run(() =>
+        useGlassOpticalRenderer({
+          active: ref(true),
+          appearance: ref('clear'),
+          canvas: ref(document.createElement('canvas')),
+          dynamicsMode: ref('vortex'),
+          quality: ref(quality),
+          routeKey: ref('/dashboard'),
+          surfaceSpace: 'scroll',
+          tintColor: ref('#8D51F9'),
+          wallpaperUrl: ref('https://example.com/wallpaper.jpg'),
+        }),
+      )
+
+      await vi.waitFor(() => expect(renderer?.state.value).toBe('ready'))
+      for (let pass = 0; pass < 3 && callbacks.size > 0; pass += 1) {
+        const scheduledCallbacks = [...callbacks.values()]
+        callbacks.clear()
+        scheduledCallbacks.forEach(callback => callback(performance.now()))
+      }
+      render.mockClear()
+
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 160, clientY: 160 }))
+      expect(callbacks.size).toBe(1)
+      const [frame] = callbacks.values()
+      callbacks.clear()
+      frame(performance.now() + 16)
+
+      expect(render).toHaveBeenCalledTimes(passes)
+      const shaders = render.mock.calls.map(call => {
+        const scene = call[0] as unknown as { children: Array<{ material?: ShaderMaterial }> }
+        return scene.children[0]?.material?.fragmentShader ?? ''
+      })
+      expect(shaders.filter(shader => shader.includes('uniform float uDynamicsMode'))).toHaveLength(1)
+      expect(shaders.filter(shader => shader.includes('uniform sampler2D uPrevious;'))).toHaveLength(passes - 1)
+      scope.stop()
+    },
+  )
+
   it('keeps static material rendering while off owns no interaction subscription or dynamic output', async () => {
     const three = await import('three')
     const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
     const subscribe = vi.fn(() => vi.fn())
     const deformationStrength = ref(80)
-    const dynamicsMode = ref<'fluid' | 'off' | 'ripple'>('off')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('off')
     const reflectionStrength = ref(40)
     appendOpticalSurface('app-hover-lift-card', { height: 240, width: 320, x: 20, y: 80 })
     const scope = effectScope()
@@ -4961,11 +5178,11 @@ describe('glass optical surface discovery', () => {
     scope.stop()
   })
 
-  it('keeps fluid and ripple resources mutually exclusive across rapid mode switches', async () => {
+  it('keeps fluid, vortex, ripple and off resources mutually exclusive across rapid switches', async () => {
     const three = await import('three')
     const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
     const subscribe = vi.fn(() => vi.fn())
-    const dynamicsMode = ref<'fluid' | 'off' | 'ripple'>('fluid')
+    const dynamicsMode = ref<'fluid' | 'off' | 'ripple' | 'vortex'>('fluid')
     appendOpticalSurface('app-hover-lift-card', { height: 240, width: 320, x: 20, y: 80 })
     const scope = effectScope()
     const renderer = scope.run(() =>
@@ -4996,6 +5213,11 @@ describe('glass optical surface discovery', () => {
     expect(uniforms.uHasFlowTexture.value).toBe(1)
     expect(uniforms.uHasRippleTexture.value).toBe(0)
 
+    dynamicsMode.value = 'vortex'
+    await vi.waitFor(() => expect(uniforms.uDynamicsMode.value).toBe(3))
+    expect(uniforms.uHasFlowTexture.value).toBe(1)
+    expect(uniforms.uHasRippleTexture.value).toBe(0)
+
     dynamicsMode.value = 'ripple'
     await vi.waitFor(() => expect(uniforms.uDynamicsMode.value).toBe(1))
     expect(uniforms.uHasFlowTexture.value).toBe(0)
@@ -5009,12 +5231,15 @@ describe('glass optical surface discovery', () => {
     ).toBe(true)
 
     dynamicsMode.value = 'off'
-    dynamicsMode.value = 'fluid'
+    dynamicsMode.value = 'vortex'
     await vi.waitFor(() => {
-      expect(uniforms.uDynamicsMode.value).toBe(0)
+      expect(uniforms.uDynamicsMode.value).toBe(3)
       expect(uniforms.uHasFlowTexture.value).toBe(1)
     })
     expect(uniforms.uHasRippleTexture.value).toBe(0)
+    dynamicsMode.value = 'fluid'
+    await vi.waitFor(() => expect(uniforms.uDynamicsMode.value).toBe(0))
+    expect(uniforms.uHasFlowTexture.value).toBe(1)
     expect(subscribe).toHaveBeenCalled()
     scope.stop()
   })

@@ -107,54 +107,63 @@ export const GLASS_FLUID_FRAGMENT_SETUP = `  vec2 wakeDirection = length(uWakeDi
   const float dynamicRangeDensity = ${GLASS_FLUID_DYNAMIC_RANGE_DENSITY.toFixed(3)};`
 
 /** fluid 的 trail 与高质量 temporal field 响应。 */
-export const GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD = `  for (int trailIndex = 0; trailIndex < 4; trailIndex++) {
-    if (trailIndex >= uTrailCount) break;
+export const GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD = `  if (fluidMode > 0.5) {
+    for (int trailIndex = 0; trailIndex < 4; trailIndex++) {
+      if (trailIndex >= uTrailCount) break;
 
-    vec4 trail = uTrail[trailIndex];
-    vec2 trailDelta = vUv - trail.xy;
-    trailDelta *= uPresentationSize / max(uVisibleViewportSize.y, 1.0) * motionRangeCompression;
-    vec2 trailSpanDelta = trail.xy - uPointer;
-    trailSpanDelta *= uPresentationSize / max(uVisibleViewportSize.y, 1.0) * motionRangeCompression;
-    trailSpatialSpan = max(trailSpatialSpan, length(trailSpanDelta) * trail.z);
-    float along = dot(trailDelta, wakeDirection);
-    float across = dot(trailDelta, wakePerpendicular);
-    float trailAlongDensity = mix(42.0, 22.0, uMotionExpansion) * dynamicRangeDensity;
-    float trailAcrossDensity = mix(210.0, 86.0, uMotionExpansion) * dynamicRangeDensity;
-    float lobe =
-      exp(-(along * along * trailAlongDensity + across * across * trailAcrossDensity)) * trail.z * uMotion;
-    float wake = mix(0.88, 0.58, float(trailIndex) / 3.0);
+      vec4 trail = uTrail[trailIndex];
+      vec2 trailDelta = vUv - trail.xy;
+      trailDelta *= uPresentationSize / max(uVisibleViewportSize.y, 1.0) * motionRangeCompression;
+      vec2 trailSpanDelta = trail.xy - uPointer;
+      trailSpanDelta *= uPresentationSize / max(uVisibleViewportSize.y, 1.0) * motionRangeCompression;
+      trailSpatialSpan = max(trailSpatialSpan, length(trailSpanDelta) * trail.z);
+      float along = dot(trailDelta, wakeDirection);
+      float across = dot(trailDelta, wakePerpendicular);
+      float trailAlongDensity = mix(42.0, 22.0, uMotionExpansion) * dynamicRangeDensity;
+      float trailAcrossDensity = mix(210.0, 86.0, uMotionExpansion) * dynamicRangeDensity;
+      float lobe =
+        exp(-(along * along * trailAlongDensity + across * across * trailAcrossDensity)) * trail.z * uMotion;
+      float wake = mix(0.88, 0.58, float(trailIndex) / 3.0);
 
-    trailRefraction +=
-      (wakeDirection * 0.0048 + wakePerpendicular * across * 0.018) *
-      lobe *
-      uDeformationStrength *
-      uFlowStrength;
-    trailEnergy += lobe * wake * mix(0.72, 0.42, float(trailIndex) / 3.0);
+      trailRefraction +=
+        (wakeDirection * 0.0048 + wakePerpendicular * across * 0.018) *
+        lobe *
+        uDeformationStrength *
+        uFlowStrength;
+      trailEnergy += lobe * wake * mix(0.72, 0.42, float(trailIndex) / 3.0);
+    }
   }
 
-  vec4 flowSample = uHasFlowTexture > 0.5 ? texture2D(uFlowTexture, vUv) : vec4(0.5, 0.5, 0.0, 1.0);
-  vec2 temporalFlow =
-    uHasFlowTexture > 0.5
-      ? (flowSample.xy * 2.0 - 1.0) *
-        flowSample.z *
-        uMotion *
-        uDeformationStrength *
-        uFlowStrength
-      : vec2(0.0);
+  vec2 temporalFlow = vec2(0.0);
   float flowSurfaceDetail = 0.0;
-  if (uQuality > 0.5 && uHasFlowTexture > 0.5) {
-    vec2 flowTexel = vec2(3.0) / max(uPresentationSize, vec2(1.0));
-    vec3 flowLeft = texture2D(uFlowTexture, vUv - vec2(flowTexel.x, 0.0)).xyz;
-    vec3 flowRight = texture2D(uFlowTexture, vUv + vec2(flowTexel.x, 0.0)).xyz;
-    vec3 flowBottom = texture2D(uFlowTexture, vUv - vec2(0.0, flowTexel.y)).xyz;
-    vec3 flowTop = texture2D(uFlowTexture, vUv + vec2(0.0, flowTexel.y)).xyz;
-    float flowGradient = length(flowRight.xy - flowLeft.xy) + length(flowTop.xy - flowBottom.xy);
-    float energyGradient = abs(flowRight.z - flowLeft.z) + abs(flowTop.z - flowBottom.z);
-    flowSurfaceDetail = smoothstep(0.015, 0.24, flowGradient + energyGradient * 0.72) * uMotion;
+  if (fluidMode > 0.5 && uHasFlowTexture > 0.5) {
+    vec4 flowSample = texture2D(uFlowTexture, vUv);
+    temporalFlow =
+      (flowSample.xy * 2.0 - 1.0) *
+      flowSample.z *
+      uMotion *
+      uDeformationStrength *
+      uFlowStrength;
+    if (uQuality > 0.5) {
+      vec2 flowTexel = vec2(3.0) / max(uPresentationSize, vec2(1.0));
+      vec3 flowLeft = texture2D(uFlowTexture, vUv - vec2(flowTexel.x, 0.0)).xyz;
+      vec3 flowRight = texture2D(uFlowTexture, vUv + vec2(flowTexel.x, 0.0)).xyz;
+      vec3 flowBottom = texture2D(uFlowTexture, vUv - vec2(0.0, flowTexel.y)).xyz;
+      vec3 flowTop = texture2D(uFlowTexture, vUv + vec2(0.0, flowTexel.y)).xyz;
+      float flowGradient = length(flowRight.xy - flowLeft.xy) + length(flowTop.xy - flowBottom.xy);
+      float energyGradient = abs(flowRight.z - flowLeft.z) + abs(flowTop.z - flowBottom.z);
+      flowSurfaceDetail = smoothstep(0.015, 0.24, flowGradient + energyGradient * 0.72) * uMotion;
+    }
   }`
 
 /** 单个 surface 内的 fluid 指针、方向、wake 与能量形态。 */
-export const GLASS_FLUID_FRAGMENT_SURFACE_SHAPE = `    vec2 pointerDelta = uPointer - vUv;
+export const GLASS_FLUID_FRAGMENT_SURFACE_SHAPE = `    vec2 pointerDelta = vec2(0.0);
+    float pointerEnergy = 0.0;
+    float sharedWaveEnergy = 0.0;
+    vec2 wakeRefraction = vec2(0.0);
+    float liquidEnergy = 0.0;
+    if (fluidMode > 0.5) {
+      pointerDelta = uPointer - vUv;
     vec2 pointerDeltaAspect = pointerDelta;
     pointerDeltaAspect *= uPresentationSize / max(uVisibleViewportSize.y, 1.0) * motionRangeCompression;
     // 三材质共享指针几何足迹；磨砂身份由位移幅度、低通扩散和材质合成表达。
@@ -171,7 +180,7 @@ export const GLASS_FLUID_FRAGMENT_SURFACE_SHAPE = `    vec2 pointerDelta = uPoin
         pow(pointerAlong + sharedWakeTravel * 0.45, 2.0) * pointerSpread * 0.72 +
         pointerAcross * pointerAcross * pointerSpread * 1.35
       ));
-    float pointerEnergy =
+    pointerEnergy =
       clamp(mix(radialPointerShape, directionalPointerShape, sharedDirectionality) * uMotion, 0.0, 1.0);
     float sharedWaveDensity = mix(2.81, 1.63, uMotionExpansion);
     float radialSharedWave =
@@ -181,7 +190,7 @@ export const GLASS_FLUID_FRAGMENT_SURFACE_SHAPE = `    vec2 pointerDelta = uPoin
         pow(pointerAlong + sharedWakeTravel, 2.0) * sharedWaveDensity * 0.62 +
         pointerAcross * pointerAcross * sharedWaveDensity * 2.2
       ));
-    float sharedWaveEnergy =
+    sharedWaveEnergy =
       mix(radialSharedWave, directionalSharedWave, sharedDirectionality) *
       clamp(length(uPointerVelocity) * 14.0 * uTranslationStrength, 0.0, 1.0) *
       mix(1.0, 0.78, sharedDirectionality) *
@@ -207,7 +216,7 @@ export const GLASS_FLUID_FRAGMENT_SURFACE_SHAPE = `    vec2 pointerDelta = uPoin
         dynamicRangeDensity *
         mix(1.0, 0.44, uMotionExpansion)
       );
-    vec2 wakeRefraction =
+    wakeRefraction =
       wakeDirection *
       wakeShape *
       wakeEnvelope *
@@ -234,15 +243,21 @@ export const GLASS_FLUID_FRAGMENT_SURFACE_SHAPE = `    vec2 pointerDelta = uPoin
       coverageDirectionality
     );
     float pointerCoverageEnergy = pow(clamp(pointerCoverageShape * uMotion, 0.0, 1.0), 1.15);
-    float liquidEnergy = clamp(max(
+    liquidEnergy = clamp(max(
       pointerCoverageEnergy,
       max(min(1.0, trailEnergy) * 0.68, wakeEnergy * 0.82)
-    ), 0.0, 1.0);`
+    ), 0.0, 1.0);
+    }`
 
 /** 单个 surface 内的 fluid 高光与焦散响应。 */
-export const GLASS_FLUID_FRAGMENT_SURFACE_OPTICS = `    float pointerStrength = mix(mix(0.0055, 0.008, uQuality), mix(0.0085, 0.012, uQuality), frosted);
-    float trailStrength = mix(mix(0.78, 1.08, uQuality), mix(0.96, 1.3, uQuality), frosted);
-    float temporalStrength = mix(0.032, 0.042, frosted) * uQuality * (1.0 + flowSurfaceDetail * 0.5);
+export const GLASS_FLUID_FRAGMENT_SURFACE_OPTICS = `    float pointerStrength = 0.0;
+    float trailStrength = 0.0;
+    float temporalStrength = 0.0;
+    float localCaustic = 0.0;
+    if (fluidMode > 0.5) {
+      pointerStrength = mix(mix(0.0055, 0.008, uQuality), mix(0.0085, 0.012, uQuality), frosted);
+      trailStrength = mix(mix(0.78, 1.08, uQuality), mix(0.96, 1.3, uQuality), frosted);
+      temporalStrength = mix(0.032, 0.042, frosted) * uQuality * (1.0 + flowSurfaceDetail * 0.5);
     vec2 specularDelta =
       vUv - (uPointer - wakeDirection * mix(0.006, 0.022, uMotionExpansion) * dynamicRangeScale);
     specularDelta *= uPresentationSize / max(uVisibleViewportSize.y, 1.0) * motionRangeCompression;
@@ -255,24 +270,27 @@ export const GLASS_FLUID_FRAGMENT_SURFACE_OPTICS = `    float pointerStrength = 
       )) *
       uMotion *
       mix(1.0, 1.24, uMotionExpansion);
-    float localCaustic = singleSpecular * rectMask * surfaceDynamic * interactionMask;`
+      localCaustic = singleSpecular * rectMask * surfaceDynamic * interactionMask;
+    }`
 
 /** fluid 对共享 dynamicRefraction 的贡献；静态透镜和 ripple 响应仍由主材质合成。 */
-export const GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION = `    vec2 sampleTranslation =
-      uPointerVelocity *
-      mix(0.055, 0.075, uQuality) *
-      uMotion *
-      uTranslationStrength;
-    dynamicRefraction += (
-      sampleTranslation +
-      // 收紧高斯半径时补偿向量峰值，避免范围缩小同时削弱用户设置的形变强度。
-      pointerDelta * pointerEnergy * pointerStrength * uDeformationStrength / dynamicRangeScale +
-      trailRefraction * trailStrength +
-      temporalFlow * temporalStrength +
-      wakeRefraction
-    ) * rectMask * surfaceDynamic * interactionMask;`
+export const GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION = `    if (fluidMode > 0.5) {
+      vec2 sampleTranslation =
+        uPointerVelocity *
+        mix(0.055, 0.075, uQuality) *
+        uMotion *
+        uTranslationStrength;
+      dynamicRefraction += (
+        sampleTranslation +
+        // 收紧高斯半径时补偿向量峰值，避免范围缩小同时削弱用户设置的形变强度。
+        pointerDelta * pointerEnergy * pointerStrength * uDeformationStrength / dynamicRangeScale +
+        trailRefraction * trailStrength +
+        temporalFlow * temporalStrength +
+        wakeRefraction
+      ) * rectMask * surfaceDynamic * interactionMask;
+    }`
 
-/** 创建仅由高质量 fluid 模式持有的时序位移场。 */
+/** 创建 High Fluid 与 Vortex 共享的两目标时序位移场。 */
 export function createGlassFluidDynamics(options: CreateGlassFluidDynamicsOptions): GlassFluidDynamics {
   const { camera, geometry, pointer, renderer, three, velocity } = options
   let disposed = false

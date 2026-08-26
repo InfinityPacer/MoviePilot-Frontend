@@ -26,6 +26,7 @@ const rendererResults = vi.hoisted(
     }>,
 )
 const interactionSource = vi.hoisted(() => ({ subscribe: vi.fn() }))
+const interactionSourceActive = vi.hoisted(() => ({ current: null as { value: boolean } | null }))
 const mobilePresentationState = vi.hoisted(() => ({
   current: null as { value: boolean } | null,
 }))
@@ -43,7 +44,11 @@ vi.mock('@/composables/useGlassOpticalRenderer', () => ({
       `${appearance}:${quality}:${routeKey}:${url}`,
   ),
   setGlassRendererState: setRendererState,
-  useGlassOpticalInteractionSource: vi.fn(() => interactionSource),
+  useGlassOpticalInteractionSource: vi.fn((active: { value: boolean }) => {
+    interactionSourceActive.current = active
+
+    return interactionSource
+  }),
   useGlassOpticalRenderer: vi.fn((options: Record<string, unknown>) => {
     rendererCalls.push(options)
     let rollbackState = {
@@ -120,18 +125,59 @@ vi.mock('@/composables/useGlassPresentationCapabilities', async () => {
 })
 
 afterEach(() => {
+  interactionSourceActive.current = null
   mobilePresentationState.current!.value = false
   rendererInitialStates.length = 0
   vi.unstubAllGlobals()
 })
 
 describe('GlassOpticalLayer', () => {
+  it('passes app idle state to the interaction gate while retaining the requested mode', async () => {
+    rendererCalls.length = 0
+    rendererResults.length = 0
+    const wrapper = shallowMount(GlassOpticalLayer, {
+      props: {
+        activityState: 'active',
+        appearance: 'clear',
+        deformationStrength: 50,
+        dynamicsMode: 'vortex',
+        flowStrength: 50,
+        previousWallpaperUrl: '',
+        quality: 'balanced',
+        reflectionStrength: 50,
+        routeKey: '/dashboard',
+        tintColor: '#8D51F9',
+        transitionDuration: 1500,
+        transitionStartedAt: 0,
+        transmissionStrength: 50,
+        translationStrength: 50,
+        transparencyStrength: 50,
+        wallpaperUrl: '/wallpaper.jpg',
+      },
+    })
+
+    expect(interactionSourceActive.current?.value).toBe(true)
+    expect(rendererCalls.every(options => (options.dynamicsActive as { value: boolean }).value)).toBe(true)
+    expect(rendererCalls.every(options => (options.dynamicsMode as { value: string }).value === 'vortex')).toBe(true)
+
+    await wrapper.setProps({ activityState: 'idle' })
+
+    expect(interactionSourceActive.current?.value).toBe(false)
+    expect(rendererCalls.every(options => (options.dynamicsActive as { value: boolean }).value)).toBe(true)
+    expect(rendererCalls.every(options => (options.dynamicsMode as { value: string }).value === 'vortex')).toBe(true)
+
+    await wrapper.setProps({ activityState: 'active' })
+    expect(interactionSourceActive.current?.value).toBe(true)
+    wrapper.unmount()
+  })
+
   it('uses exactly two visible presentation contexts with one interaction source', async () => {
     rendererCalls.length = 0
     rendererResults.length = 0
     setRendererState.mockClear()
     const wrapper = shallowMount(GlassOpticalLayer, {
       props: {
+        activityState: 'active',
         appearance: 'clear',
         deformationStrength: 50,
         dynamicsMode: 'fluid',
@@ -181,9 +227,10 @@ describe('GlassOpticalLayer', () => {
     rendererInitialStates.push('loading', 'loading')
     const wrapper = shallowMount(GlassOpticalLayer, {
       props: {
+        activityState: 'active',
         appearance: 'clear',
         deformationStrength: 50,
-        dynamicsMode: 'ripple',
+        dynamicsMode: 'vortex',
         flowStrength: 50,
         previousWallpaperUrl: '',
         quality: 'balanced',
@@ -200,21 +247,74 @@ describe('GlassOpticalLayer', () => {
     })
 
     expect(rendererCalls.every(options => (options.dynamicsActive as { value: boolean }).value)).toBe(true)
-    expect(rendererCalls.every(options => (options.dynamicsMode as { value: string }).value === 'ripple')).toBe(true)
-    expect(document.documentElement.dataset.glassDynamicsEffectiveMode).toBe('ripple')
+    expect(rendererCalls.every(options => (options.dynamicsMode as { value: string }).value === 'vortex')).toBe(true)
+    expect(document.documentElement.dataset.glassDynamicsEffectiveMode).toBe('vortex')
     expect(setRendererState).toHaveBeenCalledWith(expect.any(Object), 'loading')
     wrapper.unmount()
   })
 
-  it('keeps both material contexts while disabling dynamics on mobile presentations', async () => {
+  it.each(['ripple', 'vortex'] as const)(
+    'keeps both material contexts while disabling %s dynamics on mobile presentations',
+    async dynamicsMode => {
+      rendererCalls.length = 0
+      rendererResults.length = 0
+      mobilePresentationState.current!.value = true
+      const wrapper = shallowMount(GlassOpticalLayer, {
+        props: {
+          activityState: 'active',
+          appearance: 'frosted',
+          deformationStrength: 50,
+          dynamicsMode,
+          flowStrength: 50,
+          previousWallpaperUrl: '',
+          quality: 'high',
+          reflectionStrength: 50,
+          routeKey: '/dashboard',
+          tintColor: '#8D51F9',
+          transitionDuration: 1500,
+          transitionStartedAt: 0,
+          transmissionStrength: 50,
+          translationStrength: 50,
+          transparencyStrength: 50,
+          wallpaperUrl: '/wallpaper.jpg',
+        },
+      })
+
+      expect(wrapper.findAll('canvas')).toHaveLength(2)
+      expect(rendererCalls.every(options => !(options.dynamicsActive as { value: boolean }).value)).toBe(true)
+      expect(rendererCalls.every(options => (options.dynamicsMode as { value: string }).value === 'off')).toBe(true)
+      expect(document.documentElement.dataset.glassDynamicsMode).toBe(dynamicsMode)
+      expect(document.documentElement.dataset.glassDynamicsEffectiveMode).toBe('off')
+
+      mobilePresentationState.current!.value = false
+      await nextTick()
+
+      expect(rendererCalls.every(options => (options.dynamicsActive as { value: boolean }).value)).toBe(true)
+      expect(rendererCalls.every(options => (options.dynamicsMode as { value: string }).value === dynamicsMode)).toBe(
+        true,
+      )
+      wrapper.unmount()
+    },
+  )
+
+  it('keeps the requested vortex mode while reduced motion makes its effective mode off', () => {
     rendererCalls.length = 0
     rendererResults.length = 0
-    mobilePresentationState.current!.value = true
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        addEventListener: vi.fn(),
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        removeEventListener: vi.fn(),
+      })),
+    )
     const wrapper = shallowMount(GlassOpticalLayer, {
       props: {
-        appearance: 'frosted',
+        activityState: 'active',
+        appearance: 'clear',
         deformationStrength: 50,
-        dynamicsMode: 'ripple',
+        dynamicsMode: 'vortex',
         flowStrength: 50,
         previousWallpaperUrl: '',
         quality: 'high',
@@ -230,17 +330,10 @@ describe('GlassOpticalLayer', () => {
       },
     })
 
-    expect(wrapper.findAll('canvas')).toHaveLength(2)
     expect(rendererCalls.every(options => !(options.dynamicsActive as { value: boolean }).value)).toBe(true)
     expect(rendererCalls.every(options => (options.dynamicsMode as { value: string }).value === 'off')).toBe(true)
-    expect(document.documentElement.dataset.glassDynamicsMode).toBe('ripple')
+    expect(document.documentElement.dataset.glassDynamicsMode).toBe('vortex')
     expect(document.documentElement.dataset.glassDynamicsEffectiveMode).toBe('off')
-
-    mobilePresentationState.current!.value = false
-    await nextTick()
-
-    expect(rendererCalls.every(options => (options.dynamicsActive as { value: boolean }).value)).toBe(true)
-    expect(rendererCalls.every(options => (options.dynamicsMode as { value: string }).value === 'ripple')).toBe(true)
     wrapper.unmount()
   })
 
@@ -257,6 +350,7 @@ describe('GlassOpticalLayer', () => {
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
     const wrapper = shallowMount(GlassOpticalLayer, {
       props: {
+        activityState: 'active',
         appearance: 'frosted',
         activateWallpaperRevision: 0,
         deformationStrength: 50,
@@ -316,6 +410,7 @@ describe('GlassOpticalLayer', () => {
     rendererResults.length = 0
     const wrapper = shallowMount(GlassOpticalLayer, {
       props: {
+        activityState: 'active',
         appearance: 'frosted',
         deformationStrength: 50,
         dynamicsMode: 'fluid',
@@ -371,6 +466,7 @@ describe('GlassOpticalLayer', () => {
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
     const wrapper = shallowMount(GlassOpticalLayer, {
       props: {
+        activityState: 'active',
         appearance: 'frosted',
         activateWallpaperRevision: 8,
         deformationStrength: 50,
@@ -444,6 +540,7 @@ describe('GlassOpticalLayer', () => {
     rendererResults.length = 0
     const wrapper = shallowMount(GlassOpticalLayer, {
       props: {
+        activityState: 'active',
         appearance: 'clear',
         deformationStrength: 50,
         dynamicsMode: 'ripple',
@@ -491,6 +588,7 @@ describe('GlassOpticalLayer', () => {
     rendererResults.length = 0
     const wrapper = shallowMount(GlassOpticalLayer, {
       props: {
+        activityState: 'active',
         appearance: 'clear',
         deformationStrength: 50,
         dynamicsMode: 'ripple',
@@ -550,6 +648,7 @@ describe('GlassOpticalLayer', () => {
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
     const wrapper = shallowMount(GlassOpticalLayer, {
       props: {
+        activityState: 'active',
         appearance: 'frosted',
         activateWallpaperRevision: 9,
         deformationStrength: 50,

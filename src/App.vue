@@ -1097,6 +1097,7 @@ onUnmounted(() => {
     >
       <GlassOpticalLayer
         v-if="shouldRenderGlassOpticalLayer"
+        :activity-state="appActivityState"
         :appearance="effectiveGlassSettings.glassAppearance"
         :deformation-strength="opticalDeformationStrength"
         :dynamics-mode="effectiveGlassSettings.glassDynamicsMode"

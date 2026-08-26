@@ -7,6 +7,7 @@ import type {
 } from '@/composables/useThemeCustomizer'
 import { useGlassMobilePresentation } from '@/composables/useGlassPresentationCapabilities'
 import { usePagePresentationMotion } from '@/composables/usePagePresentationMotion'
+import type { AppActivityState } from '@/utils/appActivityLifecycle'
 import {
   createGlassWallpaperSourceCache,
   getGlassWallpaperPreparationKey,
@@ -17,6 +18,8 @@ import {
 } from '@/composables/useGlassOpticalRenderer'
 
 const props = defineProps<{
+  /** 应用级活动状态；idle/passive 只暂停交互动态，不释放已就绪的静态玻璃材质。 */
+  activityState: AppActivityState
   /** 当前玻璃材质，用于选择透明、色调或磨砂的光学参数。 */
   appearance: ThemeCustomizerGlassAppearance
   /** 用户选择的局部非均匀形变强度。 */
@@ -91,7 +94,8 @@ const effectiveDynamicsMode = computed<ThemeCustomizerGlassDynamicsMode>(() =>
   compositeFailureLatched.value ? 'off' : presentationMode.value,
 )
 const dynamicsActive = computed(() => effectiveDynamicsMode.value !== 'off')
-const interactionSource = useGlassOpticalInteractionSource(dynamicsActive)
+const interactionActive = computed(() => dynamicsActive.value && props.activityState === 'active')
+const interactionSource = useGlassOpticalInteractionSource(interactionActive)
 const pagePresentationMotion = usePagePresentationMotion()
 const wallpaperSourceCache = createGlassWallpaperSourceCache()
 const fixedRenderer = useGlassOpticalRenderer({

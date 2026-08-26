@@ -384,6 +384,7 @@ describe('GlassSettingsDialog', () => {
 
     expect(sliders).toHaveLength(6)
     expect(wrapper.find('.glass-settings-dialog__dynamics-mode').attributes('data-model-value')).toBe('fluid')
+    expect(wrapper.findAll('.glass-settings-dialog__dynamics-mode-option')).toHaveLength(4)
     expect(sliders.map(slider => slider.attributes('aria-label'))).toEqual([
       'theme.glassTransparencyStrength',
       'theme.glassTransmissionStrength',
@@ -466,6 +467,14 @@ describe('GlassSettingsDialog', () => {
     if (!modeControl) throw new Error('dynamics mode control was not rendered')
 
     expect(modeControl.attributes('data-model-value')).toBe('ripple')
+    expect(wrapper.findAll('.slider-stub')).toHaveLength(6)
+
+    modeControl.vm.$emit('update:modelValue', 'vortex')
+    await wrapper.vm.$nextTick()
+
+    expect(mocks.previewGlassSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ glassDynamicsMode: 'vortex' }),
+    )
     expect(wrapper.findAll('.slider-stub')).toHaveLength(6)
 
     modeControl.vm.$emit('update:modelValue', 'off')
