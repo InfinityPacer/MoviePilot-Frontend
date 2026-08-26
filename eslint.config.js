@@ -99,7 +99,7 @@ export default defineConfig([
     name: 'moviepilot/gitignore',
   }),
   globalIgnores(
-    ['**/.worktrees/**', '**/vite.config.*.timestamp-*.mjs', 'src/@iconify/**', '**/*.d.ts'],
+    ['**/.worktrees/**', '**/.codex-qa/**', '**/vite.config.*.timestamp-*.mjs', 'src/@iconify/**', '**/*.d.ts'],
     'moviepilot/eslint-only-ignores',
   ),
   {
