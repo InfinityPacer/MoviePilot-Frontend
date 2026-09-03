@@ -1503,7 +1503,7 @@ html[data-theme='glass'][data-glass-appearance='frosted']:is(
     [data-glass-quality='balanced'],
     [data-glass-quality='high']
   )[data-glass-renderer-state='ready'] {
-  // 页面与侧栏仍保留磨砂材质；顶栏改由共享 renderer 与独立清透背板建立厚度。
+  // 页面与侧栏需要磨砂以维持结构层级；顶栏通过共享 renderer 与清透背板建立厚度。
   --glass-surface-backdrop-filter: var(--glass-native-surface-backdrop-filter);
   --glass-navbar-backdrop-filter: var(--glass-navbar-native-backdrop-filter);
 }

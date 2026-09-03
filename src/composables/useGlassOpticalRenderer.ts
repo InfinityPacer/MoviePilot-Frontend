@@ -1083,7 +1083,7 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
   refracted += highlight * caustic * causticHighlightMix * uReflectionStrength * highlightBudget;
 
   if (uDynamicsOnly > 0.5) {
-    // 静态壳层也要在 scroll/frosted 的 dynamics-only 叠加层中保留一层稳定厚度。
+    // scroll renderer 的动态叠加层也要为固定壳层保留稳定厚度。
     float staticPresence = staticOpticalEnergy * mix(0.2, 0.34, uQuality);
     float dynamicsPresence = max(max(materialEnergy, sharedMotionPresence * 0.36), staticPresence);
     float dynamicsAlpha =
@@ -1158,7 +1158,7 @@ export function resolveGlassOpticalSurfaceMode(element: HTMLElement): GlassOptic
   return value === 'static-material' ? 'static-material' : 'dynamic'
 }
 
-/** 固定导航表面拥有独立镜片预算，其余业务表面保持既有光学行为。 */
+/** 固定导航表面拥有独立镜片预算，标准业务表面不增加静态镜片。 */
 export function resolveGlassOpticalSurfaceKind(element: HTMLElement): GlassOpticalSurfaceKind {
   if (element.matches('.layout-navbar')) return 'navbar'
   return 'default'
@@ -1179,7 +1179,7 @@ function collectGlassOpticalSurfaceDescriptors(
   for (const { rank, selector, space } of SURFACE_SELECTORS) {
     const resolvedSpace = getSurfacePresentationSpace(selector, space)
     if (surfaceSpace !== 'all' && resolvedSpace !== surfaceSpace) continue
-    // 移动壳层保持 Goal 1 的顶栏与 Dock 行为；本材质只覆盖桌面导航。
+    // 移动壳层由响应式导航材质负责；固定光学层只覆盖桌面顶栏。
     if (viewportWidth <= 600 && selector === '.layout-navbar') continue
 
     for (const element of document.querySelectorAll<HTMLElement>(selector)) {
