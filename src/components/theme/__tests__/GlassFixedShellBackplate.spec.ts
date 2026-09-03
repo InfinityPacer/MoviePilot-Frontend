@@ -1,4 +1,7 @@
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { cwd } from 'node:process'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import GlassFixedShellBackplate from '@/components/theme/GlassFixedShellBackplate.vue'
 import type { GlassFixedShellBackplateLayer } from '@/composables/useGlassFixedShellBackplate'
@@ -27,12 +30,12 @@ const initialLayers: readonly GlassFixedShellBackplateLayer[] = [
 ]
 
 describe('GlassFixedShellBackplate', () => {
-  it('keeps clear and tinted shell wallpaper aligned with the login wallpaper treatment', async () => {
-    const source = await import('../GlassFixedShellBackplate.vue?raw')
+  it('keeps clear and tinted shell wallpaper aligned with the login wallpaper treatment', () => {
+    const source = readFileSync(resolve(cwd(), 'src/components/theme/GlassFixedShellBackplate.vue'), 'utf8')
 
-    expect(source.default).toContain('brightness(var(--glass-wallpaper-brightness, 0.86)) saturate(0.95) contrast(1.02)')
-    expect(source.default).toContain("html[data-glass-appearance='frosted'] .glass-fixed-shell-backplate__wallpaper")
-    expect(source.default).toContain('linear-gradient(rgba(6, 10, 19, 10%) 0%, rgba(6, 10, 19, 30%) 100%)')
+    expect(source).toContain('brightness(var(--glass-wallpaper-brightness, 0.86)) saturate(0.95) contrast(1.02)')
+    expect(source).toContain("html[data-glass-appearance='frosted'] .glass-fixed-shell-backplate__wallpaper")
+    expect(source).toContain('linear-gradient(rgba(6, 10, 19, 10%) 0%, rgba(6, 10, 19, 30%) 100%)')
   })
 
   it('renders the App-owned slots once for the shared desktop shell', () => {
