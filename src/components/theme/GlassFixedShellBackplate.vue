@@ -139,6 +139,19 @@ const transitionStyle = computed(() => ({
   transform: translate3d(0, var(--shell-floating-navbar-inset), 0) scaleX(var(--shell-floating-navbar-scale-x));
 }
 
+// 磨砂背板只保护结构侧栏；顶栏由共享 renderer 直接采样清晰壁纸，避免双重磨砂。
+html[data-glass-appearance='frosted']
+  .layout-wrapper:not(.layout-horizontal-nav-active, .layout-overlay-nav, .layout-app-shell)
+  > .glass-fixed-shell-backplate--main {
+  clip-path: inset(var(--layout-navbar-block-size) calc(100% - var(--glass-fixed-shell-nav-inline-size)) 0 0);
+}
+
+html[data-glass-appearance='frosted']
+  .layout-wrapper:is(.layout-horizontal-nav-active, .layout-overlay-nav, .layout-app-shell)
+  > .glass-fixed-shell-backplate--main {
+  clip-path: inset(0 0 100% 0);
+}
+
 [dir='rtl'] .layout-wrapper > .glass-fixed-shell-backplate--main {
   clip-path: polygon(
     0.5rem 0,
@@ -177,6 +190,12 @@ const transitionStyle = computed(() => ({
   .layout-wrapper.layout-navbar-floating-eligible.layout-navbar-away-from-top
   > .glass-fixed-shell-backplate--main {
   clip-path: inset(0 0 calc(100% - var(--layout-navbar-block-size)) 0 round var(--shell-floating-navbar-radius));
+}
+
+html[data-glass-appearance='frosted'][dir='rtl']
+  .layout-wrapper:not(.layout-horizontal-nav-active, .layout-overlay-nav, .layout-app-shell)
+  > .glass-fixed-shell-backplate--main {
+  clip-path: inset(var(--layout-navbar-block-size) 0 0 calc(100% - var(--glass-fixed-shell-nav-inline-size)));
 }
 
 .glass-fixed-shell-backplate--overlay-nav {

@@ -207,6 +207,12 @@ describe('glass overlay material styles', () => {
     expect(backplate).toContain('transform: translate3d(0, var(--shell-floating-navbar-inset), 0)')
     expect(backplate).toContain('scaleX(var(--shell-floating-navbar-scale-x))')
     expect(backplate).toContain('.layout-wrapper.layout-navbar-floating-eligible > .glass-fixed-shell-backplate--main')
+    expect(backplate).toMatch(
+      /html\[data-glass-appearance='frosted'\][\s\S]*?\.layout-wrapper:not\(\.layout-horizontal-nav-active, \.layout-overlay-nav, \.layout-app-shell\)[\s\S]*?clip-path:\s*inset\(var\(--layout-navbar-block-size\) calc\(100% - var\(--glass-fixed-shell-nav-inline-size\)\) 0 0\);/,
+    )
+    expect(backplate).toMatch(
+      /html\[data-glass-appearance='frosted'\][\s\S]*?\.layout-wrapper:is\(\.layout-horizontal-nav-active, \.layout-overlay-nav, \.layout-app-shell\)[\s\S]*?clip-path:\s*inset\(0 0 100% 0\);/,
+    )
     expect(backplate).toContain('.glass-fixed-shell-backplate--overlay-nav')
     const mainBackplateRule = backplate.match(/\.glass-fixed-shell-backplate--main\s*\{(?<declarations>[\s\S]*?)\n\}/u)
       ?.groups?.declarations
