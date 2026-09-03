@@ -284,8 +284,8 @@ describe('glass overlay material styles', () => {
     expect(styles).toMatch(
       /:is\(\[data-glass-appearance='clear'\], \[data-glass-appearance='tinted'\]\)[\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-floating-backdrop-filter\)\s*!important;/,
     )
-    expect(styles).toMatch(
-      /\[data-glass-appearance='frosted'\][\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?\.layout-horizontal-nav-scrolled[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-floating-backdrop-filter\)\s*!important;/,
+    expect(styles).not.toMatch(
+      /\[data-glass-appearance='frosted'\]:is\([\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar/,
     )
   })
 

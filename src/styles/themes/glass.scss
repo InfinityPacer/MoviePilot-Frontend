@@ -1535,31 +1535,6 @@ html:is([data-glass-quality='balanced'], [data-glass-quality='high'])[data-glass
   }
 }
 
-// 磨砂外观不改变导航的清透材质；顶栏厚度和背景质感仍由 fixed renderer 输出。
-html[data-glass-appearance='frosted']:is(
-    [data-glass-quality='balanced'],
-    [data-glass-quality='high']
-  )[data-glass-renderer-state='ready']
-  body[data-theme='glass'] {
-  .layout-vertical-nav::before,
-  .layout-navbar {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-  }
-
-  .layout-wrapper:not(.layout-fixed-shell-backplate-active) .layout-vertical-nav::before,
-  .layout-wrapper:not(.layout-fixed-shell-backplate-active) .layout-navbar {
-    -webkit-backdrop-filter: var(--glass-native-surface-backdrop-filter) !important;
-    backdrop-filter: var(--glass-native-surface-backdrop-filter) !important;
-  }
-
-  .layout-wrapper.window-scrolled.layout-navbar-fixed .layout-navbar,
-  .layout-wrapper.layout-horizontal-nav-active.layout-horizontal-nav-scrolled.layout-navbar-fixed .layout-navbar {
-    -webkit-backdrop-filter: var(--glass-navbar-floating-backdrop-filter) !important;
-    backdrop-filter: var(--glass-navbar-floating-backdrop-filter) !important;
-  }
-}
-
 // 滚动表面由原生 backdrop 持有壁纸基底；完整内容覆盖的排除子树不再采样。
 html:is([data-glass-quality='balanced'], [data-glass-quality='high'])[data-glass-renderer-state='ready']
   body[data-theme='glass'] {
