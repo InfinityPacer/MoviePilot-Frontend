@@ -37,15 +37,12 @@ html[data-theme='glass'] {
     0 18px 44px rgba(3, 7, 18, 36%), inset 0 1px 0 rgba(255, 255, 255, 28%), inset 0 -1px 0 rgba(2, 6, 16, 18%);
   --glass-navbar-shadow:
     0 3px 12px rgba(3, 7, 18, 18%), inset 0 1px 0 rgba(255, 255, 255, 10%), inset 0 -1px 0 rgba(2, 6, 16, 12%);
-  // 顶栏沿用登录卡片的清透光学层；背景弯曲由共享 renderer 负责，不用重磨砂制造质感。
+  // 顶栏沿用登录卡片的清透光学层；背景弯曲由共享 renderer 负责，表面自身不模糊壁纸。
   --glass-navbar-native-backdrop-filter: brightness(var(--glass-transmission-brightness));
-  --glass-navbar-floating-backdrop-filter: saturate(112%) brightness(var(--glass-transmission-brightness));
-  --glass-navbar-floating-surface: rgba(7, 14, 25, 8%);
-  --glass-navbar-floating-rim: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 8%),
-    transparent 34%
-  );
+  --glass-navbar-floating-backdrop-filter: var(--glass-navbar-native-backdrop-filter);
+  --glass-navbar-surface:
+    linear-gradient(145deg, rgba(255, 255, 255, 8%), transparent 34%),
+    linear-gradient(rgba(7, 14, 25, 4%), rgba(7, 14, 25, 10%));
   --glass-navbar-floating-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 14%), inset 0 1px 0 rgba(255, 255, 255, 18%),
     0 18px 48px rgba(1, 6, 15, 18%);
@@ -201,7 +198,6 @@ html[data-theme='glass'] {
     --glass-overlay-blur: var(--glass-overlay-clarity-blur, 6px);
     --glass-overlay-saturate: 120%;
     --glass-overlay-scrim: rgba(3, 7, 18, 32%);
-    --glass-navbar-floating-surface: color-mix(in srgb, rgba(7, 14, 25, 10%) 88%, rgba(var(--glass-material-accent-rgb), 12%));
     --glass-chip-backdrop-filter: blur(10px) saturate(165%) brightness(var(--glass-transmission-brightness));
   }
 
@@ -245,7 +241,7 @@ html[data-theme='glass'] {
     --glass-overlay-saturate: 135%;
     --glass-overlay-scrim: rgba(3, 7, 18, 36%);
     --glass-navbar-native-backdrop-filter: brightness(var(--glass-transmission-brightness));
-    --glass-navbar-floating-backdrop-filter: saturate(116%) brightness(var(--glass-transmission-brightness));
+    --glass-navbar-floating-backdrop-filter: var(--glass-navbar-native-backdrop-filter);
     --glass-chip-backdrop-filter: blur(14px) saturate(175%) brightness(var(--glass-transmission-brightness));
     --glass-chip-sheen: linear-gradient(
       135deg,
@@ -444,11 +440,11 @@ html[data-theme='glass'] {
 
   .layout-navbar {
     border-color: var(--glass-border-raised) !important;
-    -webkit-backdrop-filter: var(--glass-raised-backdrop-filter);
-    backdrop-filter: var(--glass-raised-backdrop-filter);
-    background-color: var(--glass-surface-raised) !important;
-    background-image: var(--glass-sheen) !important;
-    box-shadow: var(--glass-shadow-raised) !important;
+    -webkit-backdrop-filter: var(--glass-navbar-native-backdrop-filter);
+    backdrop-filter: var(--glass-navbar-native-backdrop-filter);
+    background-color: transparent !important;
+    background-image: var(--glass-navbar-surface) !important;
+    box-shadow: var(--glass-navbar-shadow) !important;
   }
 
   // Toast 与助手气泡属于临时浮层，直接复用菜单材质 token，避免磨砂档出现不同的底色与模糊强度。
@@ -485,16 +481,11 @@ html[data-theme='glass'] {
     background-image: var(--glass-sheen) !important;
   }
 
-  // 顶栏使用更轻的投影，避免与下方内容形成内陷感。
-  .layout-navbar {
-    box-shadow: var(--glass-navbar-shadow) !important;
-  }
-
   .layout-wrapper.layout-navbar-away-from-top .layout-navbar {
     -webkit-backdrop-filter: var(--glass-navbar-floating-backdrop-filter) !important;
     backdrop-filter: var(--glass-navbar-floating-backdrop-filter) !important;
-    background-color: var(--glass-navbar-floating-surface) !important;
-    background-image: var(--glass-navbar-floating-rim) !important;
+    background-color: transparent !important;
+    background-image: var(--glass-navbar-surface) !important;
     box-shadow: var(--glass-navbar-floating-shadow) !important;
   }
 
@@ -544,8 +535,8 @@ html[data-theme='glass'] {
     border-color: var(--glass-border-raised) !important;
     -webkit-backdrop-filter: var(--glass-navbar-backdrop-filter) !important;
     backdrop-filter: var(--glass-navbar-backdrop-filter) !important;
-    background-color: var(--glass-navbar-floating-surface) !important;
-    background-image: var(--glass-navbar-floating-rim) !important;
+    background-color: transparent !important;
+    background-image: var(--glass-navbar-surface) !important;
     box-shadow: var(--glass-navbar-floating-shadow) !important;
   }
 
@@ -711,8 +702,8 @@ html[data-theme='glass'] {
       border-color: var(--glass-border-raised) !important;
       -webkit-backdrop-filter: var(--glass-navbar-floating-backdrop-filter) !important;
       backdrop-filter: var(--glass-navbar-floating-backdrop-filter) !important;
-      background-color: var(--glass-navbar-floating-surface) !important;
-      background-image: var(--glass-navbar-floating-rim) !important;
+      background-color: transparent !important;
+      background-image: var(--glass-navbar-surface) !important;
     }
   }
 

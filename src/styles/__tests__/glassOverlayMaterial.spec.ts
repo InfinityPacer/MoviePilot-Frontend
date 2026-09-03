@@ -239,16 +239,20 @@ describe('glass overlay material styles', () => {
       '--glass-navbar-native-backdrop-filter: brightness(var(--glass-transmission-brightness))',
     )
     expect(styles).toContain(
-      '--glass-navbar-floating-backdrop-filter: saturate(112%) brightness(var(--glass-transmission-brightness))',
+      '--glass-navbar-floating-backdrop-filter: var(--glass-navbar-native-backdrop-filter)',
     )
     expect(styles).toMatch(
-      /\.layout-wrapper\.layout-navbar-away-from-top \.layout-navbar\s*\{[\s\S]*?background-image:\s*var\(--glass-navbar-floating-rim\)\s*!important;/,
+      /\.layout-navbar\s*\{[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-native-backdrop-filter\);[\s\S]*?background-color:\s*transparent\s*!important;[\s\S]*?background-image:\s*var\(--glass-navbar-surface\)\s*!important;/,
     )
     expect(styles).toMatch(
-      /\.layout-wrapper\.layout-horizontal-nav-active\.layout-horizontal-nav-scrolled\.layout-navbar-fixed \.layout-navbar\s*\{[\s\S]*?background-color:\s*var\(--glass-navbar-floating-surface\)\s*!important;/,
+      /\.layout-wrapper\.layout-navbar-away-from-top \.layout-navbar\s*\{[\s\S]*?background-color:\s*transparent\s*!important;[\s\S]*?background-image:\s*var\(--glass-navbar-surface\)\s*!important;/,
+    )
+    expect(styles).toMatch(
+      /\.layout-wrapper\.layout-horizontal-nav-active\.layout-horizontal-nav-scrolled\.layout-navbar-fixed \.layout-navbar\s*\{[\s\S]*?background-color:\s*transparent\s*!important;[\s\S]*?background-image:\s*var\(--glass-navbar-surface\)\s*!important;/,
     )
     expect(styles).not.toContain('blur(3px) saturate(115%)')
-    expect(styles).toContain('--glass-navbar-floating-surface: rgba(7, 14, 25, 8%)')
+    expect(styles).toContain('linear-gradient(rgba(7, 14, 25, 4%), rgba(7, 14, 25, 10%))')
+    expect(styles).not.toContain('--glass-navbar-floating-surface')
   })
 
   it('limits detached navbar geometry to eligible Transparent and Glass horizontal shells', () => {
@@ -292,7 +296,7 @@ describe('glass overlay material styles', () => {
 
     expect(styles).not.toContain('--glass-navbar-scrolled-backdrop-filter')
     expect(styles).toMatch(
-      /:is\(\[data-glass-appearance='clear'\], \[data-glass-appearance='tinted'\]\)[\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-floating-backdrop-filter\)\s*!important;[\s\S]*?background-color:\s*var\(--glass-navbar-floating-surface\)\s*!important;/,
+      /:is\(\[data-glass-appearance='clear'\], \[data-glass-appearance='tinted'\]\)[\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-floating-backdrop-filter\)\s*!important;[\s\S]*?background-color:\s*transparent\s*!important;[\s\S]*?background-image:\s*var\(--glass-navbar-surface\)\s*!important;/,
     )
     expect(styles).not.toMatch(
       /\[data-glass-appearance='frosted'\]:is\([\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar/,
