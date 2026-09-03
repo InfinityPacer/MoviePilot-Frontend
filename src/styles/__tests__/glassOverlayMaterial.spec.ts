@@ -238,7 +238,11 @@ describe('glass overlay material styles', () => {
     expect(styles).toMatch(
       /\.layout-wrapper\.layout-navbar-away-from-top \.layout-navbar\s*\{[\s\S]*?background-image:\s*var\(--glass-navbar-floating-rim\)\s*!important;/,
     )
+    expect(styles).toMatch(
+      /\.layout-wrapper\.layout-horizontal-nav-active\.layout-horizontal-nav-scrolled\.layout-navbar-fixed \.layout-navbar\s*\{[\s\S]*?background-color:\s*var\(--glass-navbar-floating-surface\)\s*!important;/,
+    )
     expect(styles).not.toContain('blur(3px) saturate(115%)')
+    expect(styles).toContain('--glass-navbar-floating-surface: rgba(7, 14, 25, 8%)')
   })
 
   it('limits detached navbar geometry to eligible Transparent and Glass horizontal shells', () => {
@@ -282,10 +286,13 @@ describe('glass overlay material styles', () => {
 
     expect(styles).not.toContain('--glass-navbar-scrolled-backdrop-filter')
     expect(styles).toMatch(
-      /:is\(\[data-glass-appearance='clear'\], \[data-glass-appearance='tinted'\]\)[\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-floating-backdrop-filter\)\s*!important;/,
+      /:is\(\[data-glass-appearance='clear'\], \[data-glass-appearance='tinted'\]\)[\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-floating-backdrop-filter\)\s*!important;[\s\S]*?background-color:\s*var\(--glass-navbar-floating-surface\)\s*!important;/,
     )
     expect(styles).not.toMatch(
       /\[data-glass-appearance='frosted'\]:is\([\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar/,
+    )
+    expect(styles).toMatch(
+      /\[data-glass-renderer-state='ready'\][\s\S]*?\.layout-navbar\s*\{[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-backdrop-filter\)\s*!important;/,
     )
   })
 

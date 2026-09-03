@@ -220,14 +220,34 @@ const transitionStyle = computed(() => ({
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  filter: brightness(var(--glass-wallpaper-brightness, 0.82)) saturate(0.9);
+  filter: brightness(var(--glass-wallpaper-brightness, 0.86)) saturate(0.95) contrast(1.02);
   inset: 0;
 
   &::after {
     position: absolute;
-    background: linear-gradient(rgba(6, 10, 19, 24%) 0%, rgba(6, 10, 19, 48%) 100%), rgba(11, 19, 34, 8%);
+    background:
+      radial-gradient(circle at 50% 18%, transparent 24%, rgba(6, 10, 19, 12%) 100%),
+      linear-gradient(rgba(6, 10, 19, 10%) 0%, rgba(6, 10, 19, 30%) 100%);
     content: '';
     inset: 0;
+  }
+}
+
+html[data-glass-appearance='tinted'] .glass-fixed-shell-backplate__wallpaper {
+  filter: brightness(var(--glass-wallpaper-brightness, 0.85)) saturate(0.97) contrast(1.02);
+
+  &::after {
+    background:
+      radial-gradient(circle at 50% 18%, transparent 22%, rgba(6, 10, 19, 14%) 100%),
+      linear-gradient(rgba(6, 10, 19, 10%) 0%, rgba(6, 10, 19, 32%) 100%), rgba(var(--glass-material-accent-rgb), 3%);
+  }
+}
+
+html[data-glass-appearance='frosted'] .glass-fixed-shell-backplate__wallpaper {
+  filter: brightness(var(--glass-wallpaper-brightness, 0.82)) saturate(0.9);
+
+  &::after {
+    background: linear-gradient(rgba(6, 10, 19, 24%) 0%, rgba(6, 10, 19, 48%) 100%), rgba(11, 19, 34, 8%);
   }
 }
 

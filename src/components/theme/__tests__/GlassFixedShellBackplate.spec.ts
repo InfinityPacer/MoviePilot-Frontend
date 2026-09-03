@@ -27,6 +27,14 @@ const initialLayers: readonly GlassFixedShellBackplateLayer[] = [
 ]
 
 describe('GlassFixedShellBackplate', () => {
+  it('keeps clear and tinted shell wallpaper aligned with the login wallpaper treatment', async () => {
+    const source = await import('../GlassFixedShellBackplate.vue?raw')
+
+    expect(source.default).toContain('brightness(var(--glass-wallpaper-brightness, 0.86)) saturate(0.95) contrast(1.02)')
+    expect(source.default).toContain("html[data-glass-appearance='frosted'] .glass-fixed-shell-backplate__wallpaper")
+    expect(source.default).toContain('linear-gradient(rgba(6, 10, 19, 10%) 0%, rgba(6, 10, 19, 30%) 100%)')
+  })
+
   it('renders the App-owned slots once for the shared desktop shell', () => {
     const wrapper = mount(GlassFixedShellBackplate, {
       props: {
