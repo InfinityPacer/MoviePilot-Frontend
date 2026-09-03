@@ -312,7 +312,6 @@ interface GlassRendererUniforms extends Record<string, IUniform> {
   uRadii: IUniform<Vector4[]>
   uRectCount: IUniform<number>
   uRects: IUniform<Vector4[]>
-  uSurfaceDispersion: IUniform<number[]>
   uSurfaceWeights: IUniform<number[]>
   uSurfaceDynamics: IUniform<number[]>
   uPreviousTexture: IUniform<Texture | null>
@@ -572,7 +571,6 @@ uniform vec2 uRippleTexelSize;
 uniform sampler2D uRippleTexture;
 uniform vec4 uRects[8];
 uniform vec4 uRadii[8];
-uniform float uSurfaceDispersion[8];
 uniform float uSurfaceWeights[8];
 uniform float uSurfaceDynamics[8];
 uniform int uRectCount;
@@ -817,7 +815,6 @@ void main() {
   float materialEnergy = 0.0;
   float sharedMotionPresence = 0.0;
   float dynamicMask = 0.0;
-  float surfaceDispersion = 0.0;
   vec2 staticRefraction = vec2(0.0);
   vec2 dynamicRefraction = vec2(0.0);
 ${GLASS_FLUID_FRAGMENT_SETUP}
@@ -885,8 +882,6 @@ ${GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD}
     float localDirectionalReflection = broadLight * mix(0.34, 1.0, litResponse) * rectMask;
     float localTopPrism = topEdge * mix(0.38, 1.0, 1.0 - local.x) * rectMask;
     float localBacklightAbsorption = max(rightEdge * 0.72, bottomEdge * 0.46) * rectMask;
-    float chromaticEdgeResponse = max(edgeResponse, bottomEdge);
-    surfaceDispersion = max(surfaceDispersion, chromaticEdgeResponse * rectMask * uSurfaceDispersion[i]);
 ${GLASS_FLUID_FRAGMENT_SURFACE_SHAPE}
     float staticLens = 0.00008 + edgeResponse * mix(0.00045, 0.00072, uQuality);
 ${GLASS_FLUID_FRAGMENT_SURFACE_OPTICS}
@@ -924,21 +919,16 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
   dynamicRefraction = softLimitDynamicRefraction(dynamicRefraction);
   vec2 refraction = staticRefraction + dynamicRefraction;
   vec2 sourceUv = coverUv(vUv + refraction);
-  float navbarSeparation =
-    surfaceDispersion * mix(1.1, 2.2, uQuality) / max(uPresentationSize.x, 1.0);
-  float separation =
-    edge * mix(0.00024, 0.00055, uQuality) * mix(1.0, 0.58, frosted) +
-    navbarSeparation * mix(1.0, 0.72, frosted);
+  float separation = edge * mix(0.00024, 0.00055, uQuality) * mix(1.0, 0.58, frosted);
   float usesPrefilteredFrost = frosted * uHasFrostedTexture;
-  float hasSurfaceDispersion = step(0.001, surfaceDispersion);
-  vec3 refracted = usesPrefilteredFrost > 0.5 && hasSurfaceDispersion < 0.5
+  vec3 refracted = usesPrefilteredFrost > 0.5
     ? sampleWallpaper(sourceUv)
     : sampleChromatic(sourceUv, separation);
   float detailSeparation = separation * mix(1.45, 2.35, uQuality);
-  vec3 detailed = usesPrefilteredFrost > 0.5 && hasSurfaceDispersion < 0.5
+  vec3 detailed = usesPrefilteredFrost > 0.5
     ? refracted
     : sampleChromatic(sourceUv, detailSeparation);
-  refracted = mix(refracted, detailed, mix(0.06, 0.16, uQuality) * mix(1.0, 0.55, frosted));
+  refracted = mix(refracted, detailed, mix(0.06, 0.16, uQuality) * (1.0 - frosted));
   vec2 diffusionAxis = length(refraction) > 0.00001 ? normalize(refraction) : wakePerpendicular;
   float diffusionRadius =
     mix(0.0022, 0.0038, uQuality) *
@@ -1034,10 +1024,7 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
   refracted += highlight * caustic * causticHighlightMix * uReflectionStrength * highlightBudget;
 
   if (uDynamicsOnly > 0.5) {
-    float dynamicsPresence = max(
-      max(materialEnergy, sharedMotionPresence * 0.36),
-      surfaceDispersion * mix(0.16, 0.24, uQuality)
-    );
+    float dynamicsPresence = max(materialEnergy, sharedMotionPresence * 0.36);
     float dynamicsAlpha =
       clamp(dynamicsPresence * mix(0.5, 0.72, uQuality) * mix(1.0, 1.12, frosted), 0.0, 0.82);
     gl_FragColor = vec4(refracted, dynamicsAlpha);
@@ -1125,6 +1112,8 @@ function collectGlassOpticalSurfaceDescriptors(
   for (const { rank, selector, space } of SURFACE_SELECTORS) {
     const resolvedSpace = getSurfacePresentationSpace(selector, space)
     if (surfaceSpace !== 'all' && resolvedSpace !== surfaceSpace) continue
+    // 移动端透明顶栏只使用稳定的 CSS 表面，避免滚动重扫时再次叠加壁纸折射。
+    if (viewportWidth <= 600 && appearance === 'clear' && selector === '.layout-navbar') continue
 
     for (const element of document.querySelectorAll<HTMLElement>(selector)) {
       if (seen.has(element)) continue
@@ -1897,7 +1886,6 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     )
     const uniformRects = resources.uniforms.uRects.value
     const uniformRadii = resources.uniforms.uRadii.value
-    const uniformDispersion = resources.uniforms.uSurfaceDispersion.value
     const uniformWeights = resources.uniforms.uSurfaceWeights.value
     const uniformDynamics = resources.uniforms.uSurfaceDynamics.value
     const ownersWithVisibleInteractionClips = new Set(interactionClips.map(clip => clip.owner))
@@ -1926,11 +1914,6 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
               ? 1
               : 0
       uniformWeights[index] = surfaceWeight * pagePresentationWeight
-      // 顶栏色散属于 fixed shell 材质；页面卡片与侧栏保留既有低成本采样。
-      uniformDispersion[index] =
-        presentationSpace === 'fixed' && slot?.key.matches('.layout-navbar')
-          ? surfaceWeight * pagePresentationWeight
-          : 0
       const nestedInteractionAvailable =
         !slot || !interactionClipConstrainedOwners.has(slot.key) || ownersWithVisibleInteractionClips.has(slot.key)
       uniformDynamics[index] = slot?.mode === 'static-material' || !nestedInteractionAvailable ? 0 : 1
@@ -3944,7 +3927,6 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
         uRadii: { value: Array.from({ length: 8 }, () => new Vector4Class()) },
         uRectCount: { value: 0 },
         uRects: { value: Array.from({ length: 8 }, () => new Vector4Class()) },
-        uSurfaceDispersion: { value: Array.from({ length: 8 }, () => 0) },
         uSurfaceWeights: { value: Array.from({ length: 8 }, () => 0) },
         uSurfaceDynamics: { value: Array.from({ length: 8 }, () => 1) },
         uPreviousTexture: { value: null },
