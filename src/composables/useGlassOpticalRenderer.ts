@@ -29,6 +29,7 @@ import {
   getGlassOpticalMotionEnergy,
   getGlassOpticalReflectionStrengthScale,
   getGlassOpticalRenderProfile,
+  getGlassStaticSurfaceProfile,
   getGlassOpticalTransmissionStrength,
   getGlassScrollBufferSize,
   getGlassOpticalTranslationStrengthScale,
@@ -42,6 +43,7 @@ import {
   type GlassOpticalQuality,
   type GlassOpticalRect,
   type GlassOpticalSurfaceCandidate,
+  type GlassOpticalSurfaceKind,
   type GlassOpticalSurfaceMode,
   type GlassOpticalSurfaceSlot,
 } from '@/utils/glassOptics'
@@ -312,6 +314,7 @@ interface GlassRendererUniforms extends Record<string, IUniform> {
   uRadii: IUniform<Vector4[]>
   uRectCount: IUniform<number>
   uRects: IUniform<Vector4[]>
+  uSurfaceOpticalProfile: IUniform<Vector4[]>
   uSurfaceWeights: IUniform<number[]>
   uSurfaceDynamics: IUniform<number[]>
   uPreviousTexture: IUniform<Texture | null>
@@ -392,6 +395,7 @@ interface UseGlassOpticalRendererOptions {
 }
 
 type GlassOpticalSurfaceDescriptor = GlassOpticalSurfaceCandidate<HTMLElement> & {
+  kind: GlassOpticalSurfaceKind
   mode: GlassOpticalSurfaceMode
 }
 
@@ -571,6 +575,7 @@ uniform vec2 uRippleTexelSize;
 uniform sampler2D uRippleTexture;
 uniform vec4 uRects[8];
 uniform vec4 uRadii[8];
+uniform vec4 uSurfaceOpticalProfile[8];
 uniform float uSurfaceWeights[8];
 uniform float uSurfaceDynamics[8];
 uniform int uRectCount;
@@ -751,6 +756,16 @@ vec3 sampleChromatic(vec2 uv, float separation) {
   );
 }
 
+vec3 sampleChromaticAlong(vec2 uv, vec2 axis, float separation) {
+  vec2 offset = normalize(axis) * separation;
+
+  return vec3(
+    sampleWallpaper(uv + offset).r,
+    sampleWallpaper(uv).g,
+    sampleWallpaper(uv - offset).b
+  );
+}
+
 vec3 sampleBalancedDiffuse(vec2 uv, vec2 axis, float radius) {
   vec2 firstOffset = axis * radius;
   vec2 secondOffset = vec2(-axis.y, axis.x) * radius;
@@ -805,6 +820,15 @@ vec2 softLimitDynamicRefraction(vec2 refraction) {
   return refractionPixels * limitScale / presentation;
 }
 
+vec2 softLimitStaticRefraction(vec2 refraction, float limit) {
+  vec2 presentation = max(uPresentationSize, vec2(1.0));
+  vec2 refractionPixels = refraction * presentation;
+  float safeLimit = max(0.5, limit);
+  float limitScale = safeLimit / sqrt(safeLimit * safeLimit + dot(refractionPixels, refractionPixels));
+
+  return refractionPixels * limitScale / presentation;
+}
+
 void main() {
   float mask = 0.0;
   float edge = 0.0;
@@ -815,6 +839,10 @@ void main() {
   float materialEnergy = 0.0;
   float sharedMotionPresence = 0.0;
   float dynamicMask = 0.0;
+  float staticOpticalEnergy = 0.0;
+  float staticRefractionLimit = 0.0;
+  float staticChromaticDispersion = 0.0;
+  vec2 staticChromaticDirection = vec2(1.0, 0.0);
   vec2 staticRefraction = vec2(0.0);
   vec2 dynamicRefraction = vec2(0.0);
 ${GLASS_FLUID_FRAGMENT_SETUP}
@@ -862,6 +890,7 @@ ${GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD}
 
     vec4 rect = uRects[i];
     float surfaceDynamic = uSurfaceDynamics[i];
+    vec4 staticProfile = uSurfaceOpticalProfile[i];
     vec2 local = (vUv - rect.xy) / rect.zw;
     float rectMask = roundedRectMask(local, rect.zw * uPresentationSize, uRadii[i]) * uSurfaceWeights[i];
     if (rectMask <= 0.0) continue;
@@ -878,6 +907,13 @@ ${GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD}
     float topEdge = 1.0 - smoothstep(0.0, 0.11, 1.0 - local.y);
     float rightEdge = 1.0 - smoothstep(0.0, 0.14, 1.0 - local.x);
     float bottomEdge = 1.0 - smoothstep(0.0, 0.14, local.y);
+    float leftEdge = 1.0 - smoothstep(0.0, 0.14, local.x);
+    float staticEdgeResponse = max(max(leftEdge, rightEdge), max(topEdge, bottomEdge));
+    vec2 staticEdgeNormal = vec2(rightEdge - leftEdge, topEdge - bottomEdge);
+    float staticEdgeNormalLength = length(staticEdgeNormal);
+    if (staticEdgeNormalLength > 0.0001) {
+      staticEdgeNormal /= staticEdgeNormalLength;
+    }
     float litResponse = clamp(0.5 + lightCoordinate * 1.15, 0.0, 1.0);
     float localDirectionalReflection = broadLight * mix(0.34, 1.0, litResponse) * rectMask;
     float localTopPrism = topEdge * mix(0.38, 1.0, 1.0 - local.x) * rectMask;
@@ -886,6 +922,18 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_SHAPE}
     float staticLens = 0.00008 + edgeResponse * mix(0.00045, 0.00072, uQuality);
 ${GLASS_FLUID_FRAGMENT_SURFACE_OPTICS}
     staticRefraction += lens * staticLens * mix(1.0, 0.72, frosted) * rectMask * surfaceDynamic;
+    float staticProfileMask = staticEdgeResponse * rectMask;
+    staticRefraction +=
+      staticEdgeNormal * staticProfile.x * staticProfileMask / max(uPresentationSize, vec2(1.0));
+    staticRefraction +=
+      lens * staticProfile.y * 2.0 * rectMask / max(uPresentationSize, vec2(1.0));
+    staticRefractionLimit = max(staticRefractionLimit, staticProfile.x * staticProfileMask);
+    staticOpticalEnergy = max(staticOpticalEnergy, staticProfile.w * staticProfileMask);
+    float profileDispersion = staticProfile.z * staticProfileMask;
+    if (profileDispersion > staticChromaticDispersion) {
+      staticChromaticDispersion = profileDispersion;
+      staticChromaticDirection = staticEdgeNormal;
+    }
 ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
     dynamicRefraction += rippleRefraction * rippleMode * rectMask * surfaceDynamic * interactionMask;
     edge = max(edge, edgeResponse * rectMask * surfaceDynamic);
@@ -917,17 +965,23 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
   // 高光足迹与壁纸位移强度独立校准，收紧反馈范围不能同步削弱三项动态参数。
   dynamicRefraction *= 1.2;
   dynamicRefraction = softLimitDynamicRefraction(dynamicRefraction);
+  if (staticRefractionLimit > 0.001) {
+    staticRefraction = softLimitStaticRefraction(staticRefraction, staticRefractionLimit);
+  }
   vec2 refraction = staticRefraction + dynamicRefraction;
   vec2 sourceUv = coverUv(vUv + refraction);
   float separation = edge * mix(0.00024, 0.00055, uQuality) * mix(1.0, 0.58, frosted);
+  float profileSeparation = staticChromaticDispersion / max(uPresentationSize.x, 1.0);
+  float chromaticSeparation = max(separation, profileSeparation);
   float usesPrefilteredFrost = frosted * uHasFrostedTexture;
-  vec3 refracted = usesPrefilteredFrost > 0.5
+  float hasStaticChromaticDispersion = step(0.001, staticChromaticDispersion);
+  vec3 refracted = usesPrefilteredFrost > 0.5 && hasStaticChromaticDispersion < 0.5
     ? sampleWallpaper(sourceUv)
-    : sampleChromatic(sourceUv, separation);
-  float detailSeparation = separation * mix(1.45, 2.35, uQuality);
-  vec3 detailed = usesPrefilteredFrost > 0.5
+    : sampleChromaticAlong(sourceUv, staticChromaticDirection, chromaticSeparation);
+  float detailSeparation = chromaticSeparation * mix(1.45, 2.35, uQuality);
+  vec3 detailed = usesPrefilteredFrost > 0.5 && hasStaticChromaticDispersion < 0.5
     ? refracted
-    : sampleChromatic(sourceUv, detailSeparation);
+    : sampleChromaticAlong(sourceUv, staticChromaticDirection, detailSeparation);
   refracted = mix(refracted, detailed, mix(0.06, 0.16, uQuality) * (1.0 - frosted));
   vec2 diffusionAxis = length(refraction) > 0.00001 ? normalize(refraction) : wakePerpendicular;
   float diffusionRadius =
@@ -1017,6 +1071,11 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
       0.0,
       0.36
     );
+  reflectionMix = clamp(
+    reflectionMix + staticOpticalEnergy * 0.1 * uReflectionStrength * highlightBudget,
+    0.0,
+    0.42
+  );
   float absorption =
     clamp(backlightAbsorption * mix(0.035, 0.075, frosted) * uReflectionStrength, 0.0, 0.14);
   refracted *= 1.0 - absorption;
@@ -1024,7 +1083,9 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
   refracted += highlight * caustic * causticHighlightMix * uReflectionStrength * highlightBudget;
 
   if (uDynamicsOnly > 0.5) {
-    float dynamicsPresence = max(materialEnergy, sharedMotionPresence * 0.36);
+    // 静态壳层也要在 scroll/frosted 的 dynamics-only 叠加层中保留一层稳定厚度。
+    float staticPresence = staticOpticalEnergy * mix(0.2, 0.34, uQuality);
+    float dynamicsPresence = max(max(materialEnergy, sharedMotionPresence * 0.36), staticPresence);
     float dynamicsAlpha =
       clamp(dynamicsPresence * mix(0.5, 0.72, uQuality) * mix(1.0, 1.12, frosted), 0.0, 0.82);
     gl_FragColor = vec4(refracted, dynamicsAlpha);
@@ -1097,6 +1158,12 @@ export function resolveGlassOpticalSurfaceMode(element: HTMLElement): GlassOptic
   return value === 'static-material' ? 'static-material' : 'dynamic'
 }
 
+/** 固定导航表面拥有独立镜片预算，其余业务表面保持既有光学行为。 */
+export function resolveGlassOpticalSurfaceKind(element: HTMLElement): GlassOpticalSurfaceKind {
+  if (element.matches('.layout-navbar')) return 'navbar'
+  return 'default'
+}
+
 /** 读取全部可见视觉表面，并保留 DOM 元素作为 renderer 生命周期内的稳定身份。 */
 function collectGlassOpticalSurfaceDescriptors(
   viewportWidth: number,
@@ -1112,8 +1179,8 @@ function collectGlassOpticalSurfaceDescriptors(
   for (const { rank, selector, space } of SURFACE_SELECTORS) {
     const resolvedSpace = getSurfacePresentationSpace(selector, space)
     if (surfaceSpace !== 'all' && resolvedSpace !== surfaceSpace) continue
-    // 移动端透明顶栏只使用稳定的 CSS 表面，避免滚动重扫时再次叠加壁纸折射。
-    if (viewportWidth <= 600 && appearance === 'clear' && selector === '.layout-navbar') continue
+    // 移动壳层保持 Goal 1 的顶栏与 Dock 行为；本材质只覆盖桌面导航。
+    if (viewportWidth <= 600 && selector === '.layout-navbar') continue
 
     for (const element of document.querySelectorAll<HTMLElement>(selector)) {
       if (seen.has(element)) continue
@@ -1136,6 +1203,7 @@ function collectGlassOpticalSurfaceDescriptors(
 
       candidates.push({
         key: element,
+        kind: resolveGlassOpticalSurfaceKind(element),
         mode: resolveGlassOpticalSurfaceMode(element),
         rect: {
           height: bounds.height,
@@ -1169,7 +1237,7 @@ function collectGlassOpticalSurfaceDescriptors(
         rect.x + rect.width <= parent.rect.x + parent.rect.width &&
         rect.y + rect.height <= parent.rect.y + parent.rect.height,
     )
-    if (!nested) selected.push({ key: candidate.key, mode: candidate.mode, rect })
+    if (!nested) selected.push({ key: candidate.key, kind: candidate.kind, mode: candidate.mode, rect })
   }
 
   return selected
@@ -1218,6 +1286,15 @@ function getGlassAppearanceUniformValue(appearance: ThemeCustomizerGlassAppearan
   if (appearance === 'frosted') return 2
 
   return 0
+}
+
+/** 浮动顶栏需要更明显的背景弯曲；连接在顶边时收窄静态镜片预算，避免首屏形成厚重色块。 */
+function getGlassStaticSurfaceProfileScale(element: HTMLElement, kind: GlassOpticalSurfaceKind) {
+  if (kind !== 'navbar') return 1
+  if (element.closest('.layout-navbar-floating-eligible.layout-navbar-away-from-top')) return 1
+  if (element.closest('.layout-navbar-away-from-top')) return 0.72
+
+  return 0.45
 }
 
 /** 管理玻璃主题唯一 renderer、事件驱动帧调度与完整 GPU 资源释放。 */
@@ -1328,8 +1405,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
   let resumeVersion = 0
   let dynamicsGeneration = 0
   const presentationSpace = options.surfaceSpace ?? 'fixed'
-  const usesDynamicsOnly = () =>
-    presentationSpace === 'scroll' || (presentationSpace === 'fixed' && toValue(options.appearance) === 'frosted')
+  const usesDynamicsOnly = () => presentationSpace === 'scroll'
   const wallpaperSourceCache = options.wallpaperSourceCache ?? createGlassWallpaperSourceCache()
 
   /** 滚动期间由原生 backdrop 接管壁纸；稳定态恢复完整纹理折射与流体反馈。 */
@@ -1886,6 +1962,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     )
     const uniformRects = resources.uniforms.uRects.value
     const uniformRadii = resources.uniforms.uRadii.value
+    const uniformOpticalProfiles = resources.uniforms.uSurfaceOpticalProfile.value
     const uniformWeights = resources.uniforms.uSurfaceWeights.value
     const uniformDynamics = resources.uniforms.uSurfaceDynamics.value
     const ownersWithVisibleInteractionClips = new Set(interactionClips.map(clip => clip.owner))
@@ -1905,6 +1982,17 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
       const radii = surface?.radii ?? [0, 0, 0, 0]
       uniformRects[index].set(rect[0], rect[1], rect[2], rect[3])
       uniformRadii[index].set(radii[0], radii[1], radii[2], radii[3])
+      const opticalProfile = getGlassStaticSurfaceProfile(
+        toValue(options.quality),
+        slot?.kind ?? 'default',
+      )
+      const profileScale = slot ? getGlassStaticSurfaceProfileScale(slot.key, slot.kind ?? 'default') : 0
+      uniformOpticalProfiles[index].set(
+        opticalProfile.edgeRefractionPixels * profileScale,
+        opticalProfile.centerRefractionPixels * profileScale,
+        opticalProfile.chromaticDispersionPixels * profileScale,
+        opticalProfile.edgeHighlightStrength * profileScale,
+      )
       const surfaceWeight =
         slot?.role === 'outgoing'
           ? transitionWeights.outgoing
@@ -1948,7 +2036,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
       const rect = committedRect ?? getElementPresentationRect(element)
 
       seen.add(element)
-      candidates.push({ key: element, mode, owner, rect })
+      candidates.push({ key: element, kind: resolveGlassOpticalSurfaceKind(owner), mode, owner, rect })
     }
 
     for (const surface of surfaceRegistry) {
@@ -3927,6 +4015,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
         uRadii: { value: Array.from({ length: 8 }, () => new Vector4Class()) },
         uRectCount: { value: 0 },
         uRects: { value: Array.from({ length: 8 }, () => new Vector4Class()) },
+        uSurfaceOpticalProfile: { value: Array.from({ length: 8 }, () => new Vector4Class()) },
         uSurfaceWeights: { value: Array.from({ length: 8 }, () => 0) },
         uSurfaceDynamics: { value: Array.from({ length: 8 }, () => 1) },
         uPreviousTexture: { value: null },

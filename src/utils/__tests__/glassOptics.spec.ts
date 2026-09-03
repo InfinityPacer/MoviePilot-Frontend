@@ -19,6 +19,7 @@ import {
   getGlassOpticalPresetKey,
   getGlassOpticalReflectionStrengthScale,
   getGlassOpticalRenderProfile,
+  getGlassStaticSurfaceProfile,
   getGlassOpticalTransparency,
   getGlassOpticalTransmissionStrength,
   getGlassOpticalSurfaceTransitionWeights,
@@ -36,6 +37,21 @@ import {
 import { describe, expect, it } from 'vitest'
 
 describe('glass optics geometry', () => {
+  it('uses a stronger static lens for high-quality navigation surfaces', () => {
+    const balancedNavbar = getGlassStaticSurfaceProfile('balanced', 'navbar')
+    const highNavbar = getGlassStaticSurfaceProfile('high', 'navbar')
+
+    expect(highNavbar.edgeRefractionPixels).toBeGreaterThan(balancedNavbar.edgeRefractionPixels)
+    expect(highNavbar.centerRefractionPixels).toBeGreaterThan(balancedNavbar.centerRefractionPixels)
+    expect(highNavbar.chromaticDispersionPixels).toBeGreaterThan(balancedNavbar.chromaticDispersionPixels)
+    expect(getGlassStaticSurfaceProfile('high', 'default')).toEqual({
+      centerRefractionPixels: 0,
+      chromaticDispersionPixels: 0,
+      edgeHighlightStrength: 0,
+      edgeRefractionPixels: 0,
+    })
+  })
+
   it('caps the renderer buffer independently from device pixel ratio', () => {
     expect(getGlassOpticalBufferSize(3456, 2234, false)).toEqual({ height: 931, width: 1440 })
     expect(getGlassOpticalBufferSize(390, 844, true)).toEqual({ height: 844, width: 390 })

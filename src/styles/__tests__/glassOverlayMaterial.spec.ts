@@ -226,6 +226,21 @@ describe('glass overlay material styles', () => {
     expect(overlayBackplateRule).toMatch(/transition:\s*clip-path 0\.25s ease-in-out/u)
   })
 
+  it('uses clear shared-renderer optics for navigation instead of a heavy navbar blur', () => {
+    const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
+
+    expect(styles).toContain(
+      '--glass-navbar-native-backdrop-filter: brightness(var(--glass-transmission-brightness))',
+    )
+    expect(styles).toContain(
+      '--glass-navbar-floating-backdrop-filter: saturate(112%) brightness(var(--glass-transmission-brightness))',
+    )
+    expect(styles).toMatch(
+      /\.layout-wrapper\.layout-navbar-away-from-top \.layout-navbar\s*\{[\s\S]*?background-image:\s*var\(--glass-navbar-floating-rim\)\s*!important;/,
+    )
+    expect(styles).not.toContain('blur(3px) saturate(115%)')
+  })
+
   it('limits detached navbar geometry to eligible Transparent and Glass horizontal shells', () => {
     const layout = readFileSync(resolve(cwd(), 'src/@layouts/components/VerticalNavLayout.vue'), 'utf8')
 
@@ -262,15 +277,15 @@ describe('glass overlay material styles', () => {
     )
   })
 
-  it('shares the same light frost when glass navbars overlap scrolled content', () => {
+  it('keeps scrolled glass navbars clear while the renderer supplies optical depth', () => {
     const styles = readFileSync(resolve(cwd(), 'src/styles/themes/glass.scss'), 'utf8')
 
-    expect(styles).toContain('--glass-navbar-scrolled-backdrop-filter: blur(3px) saturate(115%)')
+    expect(styles).not.toContain('--glass-navbar-scrolled-backdrop-filter')
     expect(styles).toMatch(
-      /:is\(\[data-glass-appearance='clear'\], \[data-glass-appearance='tinted'\]\)[\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-scrolled-backdrop-filter\)\s*!important;/,
+      /:is\(\[data-glass-appearance='clear'\], \[data-glass-appearance='tinted'\]\)[\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-floating-backdrop-filter\)\s*!important;/,
     )
     expect(styles).toMatch(
-      /\[data-glass-appearance='frosted'\][\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?\.layout-horizontal-nav-scrolled[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-scrolled-backdrop-filter\)\s*!important;/,
+      /\[data-glass-appearance='frosted'\][\s\S]*?\.layout-wrapper\.window-scrolled\.layout-navbar-fixed \.layout-navbar,[\s\S]*?\.layout-horizontal-nav-scrolled[\s\S]*?backdrop-filter:\s*var\(--glass-navbar-floating-backdrop-filter\)\s*!important;/,
     )
   })
 

@@ -404,12 +404,10 @@ describe('glass optical surface discovery', () => {
     expect(rects[0]).toMatchObject({ height: 200, width: 350, x: 20, y: 120 })
   })
 
-  it('keeps the navbar in mobile frosted optical surfaces', () => {
+  it('keeps mobile navbars outside the desktop optical material', () => {
     appendOpticalSurface('layout-navbar', { height: 64, width: 390, x: 0, y: 0 })
 
-    expect(collectGlassOpticalRects(390, 800, 'frosted')).toEqual([
-      expect.objectContaining({ height: 64, width: 390, x: 0, y: 0 }),
-    ])
+    expect(collectGlassOpticalRects(390, 800, 'frosted')).toEqual([])
   })
 
   it('keeps the navbar in desktop clear optical surfaces', () => {
@@ -418,6 +416,48 @@ describe('glass optical surface discovery', () => {
     expect(collectGlassOpticalRects(1000, 800, 'clear')).toEqual([
       expect.objectContaining({ height: 64, width: 1000, x: 0, y: 0 }),
     ])
+  })
+
+  it('writes distinct balanced and high static lens budgets for the desktop navbar', async () => {
+    const three = await import('three')
+    const navbar = appendOpticalSurface('layout-navbar', { height: 64, width: 1000, x: 0, y: 0 })
+    const layout = document.createElement('div')
+    layout.className = 'layout-navbar-floating-eligible layout-navbar-away-from-top'
+    navbar.remove()
+    layout.append(navbar)
+    document.body.append(layout)
+    const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
+    const quality = ref<'balanced' | 'high'>('balanced')
+    const scope = effectScope()
+    const renderer = scope.run(() =>
+      useGlassOpticalRenderer({
+        active: ref(true),
+        appearance: ref('clear'),
+        canvas: ref(document.createElement('canvas')),
+        quality,
+        routeKey: ref('/dashboard'),
+        surfaceSpace: 'fixed',
+        tintColor: ref('#8D51F9'),
+        wallpaperUrl: ref('https://example.com/wallpaper.jpg'),
+      }),
+    )
+
+    await vi.waitFor(() => expect(renderer?.state.value).toBe('ready'))
+    const scene = render.mock.calls.at(-1)?.[0] as unknown as {
+      children: Array<{
+        material: {
+          uniforms: {
+            uSurfaceOpticalProfile: { value: Array<{ x: number; y: number; z: number; w: number }> }
+          }
+        }
+      }>
+    }
+    const profiles = scene.children[0].material.uniforms.uSurfaceOpticalProfile.value
+    expect(profiles[0]).toMatchObject({ x: 6.4, y: 1.05, z: 0.12, w: 0.42 })
+
+    quality.value = 'high'
+    await vi.waitFor(() => expect(profiles[0]).toMatchObject({ x: 12, y: 1.45, z: 0.72, w: 0.64 }))
+    scope.stop()
   })
 
   it('uses the actual dashboard card boundary and all four corner radii', () => {
@@ -520,7 +560,7 @@ describe('glass optical surface discovery', () => {
     ])
   })
 
-  it('keeps frosted fixed surfaces on dynamics-only GPU composition', async () => {
+  it('keeps fixed surfaces on full optical composition across glass appearances', async () => {
     const three = await import('three')
     const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
     const canvas = document.createElement('canvas')
@@ -554,7 +594,7 @@ describe('glass optical surface discovery', () => {
     expect(dynamicsOnly.value).toBe(0)
 
     appearance.value = 'frosted'
-    await vi.waitFor(() => expect(dynamicsOnly.value).toBe(1))
+    await vi.waitFor(() => expect(dynamicsOnly.value).toBe(0))
 
     appearance.value = 'tinted'
     await vi.waitFor(() => expect(dynamicsOnly.value).toBe(0))
@@ -4635,7 +4675,7 @@ describe('glass optical surface discovery', () => {
     expect(scene.children[0].material.fragmentShader).toContain('mix(1.0, 0.78, sharedDirectionality)')
     expect(scene.children[0].material.fragmentShader).toContain('uMotion *\n      uMotion')
     expect(scene.children[0].material.fragmentShader).toContain(
-      'float dynamicsPresence = max(materialEnergy, sharedMotionPresence * 0.36)',
+      'float dynamicsPresence = max(max(materialEnergy, sharedMotionPresence * 0.36), staticPresence)',
     )
     expect(scene.children[0].material.fragmentShader).toContain('uniform float uFlowStrength')
     expect(scene.children[0].material.fragmentShader).toContain('uniform float uReflectionStrength')

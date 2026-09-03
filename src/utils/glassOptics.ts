@@ -17,6 +17,7 @@ export type GlassOpticalPresetKey = `${GlassAppearance}:${GlassOpticalCapability
 export type GlassOpticalPresetOverrides = Partial<Record<GlassOpticalPresetKey, GlassOpticalParameters>>
 export type GlassOpticalQuality = 'balanced' | 'high'
 export type GlassCornerRadii = [number, number, number, number]
+export type GlassOpticalSurfaceKind = 'default' | 'navbar'
 
 export interface GlassOpticalParameters {
   /** 局部非均匀折射与内容弯曲强度。 */
@@ -93,6 +94,8 @@ export type GlassOpticalSurfaceMode = 'dynamic' | 'static-material'
 export interface GlassOpticalSurfaceCandidate<TKey> {
   /** renderer 生命周期内稳定的表面身份。 */
   key: TKey
+  /** 表面的功能职责，用于选择稳定的静态镜片预算。 */
+  kind?: GlassOpticalSurfaceKind
   /** 表面使用完整动态光学，或只保留稳定材质能量。 */
   mode?: GlassOpticalSurfaceMode
   /** 表面的当前视口几何。 */
@@ -134,6 +137,51 @@ export interface GlassOpticalRenderProfile {
   textureSource: 'auto' | 'procedural' | 'wallpaper'
   /** 参与液态方向计算的最近输入采样数量。 */
   trailCount: number
+}
+
+export interface GlassStaticSurfaceProfile {
+  /** 表面中心区域的轻微径向折射上限，单位为视口像素。 */
+  centerRefractionPixels: number
+  /** 表面边缘沿法线方向的背景位移软上限，单位为视口像素。 */
+  edgeRefractionPixels: number
+  /** RGB 通道沿边缘法线分离的采样距离，单位为视口像素。 */
+  chromaticDispersionPixels: number
+  /** 静态光学能量参与边缘反射与表面厚度输出的强度。 */
+  edgeHighlightStrength: number
+}
+
+const GLASS_STATIC_SURFACE_PROFILE_MATRIX: Record<
+  GlassOpticalQuality,
+  Record<GlassOpticalSurfaceKind, GlassStaticSurfaceProfile>
+> = {
+  balanced: {
+    default: {
+      centerRefractionPixels: 0,
+      chromaticDispersionPixels: 0,
+      edgeHighlightStrength: 0,
+      edgeRefractionPixels: 0,
+    },
+    navbar: {
+      centerRefractionPixels: 1.05,
+      chromaticDispersionPixels: 0.12,
+      edgeHighlightStrength: 0.42,
+      edgeRefractionPixels: 6.4,
+    },
+  },
+  high: {
+    default: {
+      centerRefractionPixels: 0,
+      chromaticDispersionPixels: 0,
+      edgeHighlightStrength: 0,
+      edgeRefractionPixels: 0,
+    },
+    navbar: {
+      centerRefractionPixels: 1.45,
+      chromaticDispersionPixels: 0.72,
+      edgeHighlightStrength: 0.64,
+      edgeRefractionPixels: 12,
+    },
+  },
 }
 
 /** 将用户滑杆输入收敛到 renderer 支持的整数范围，非法存量值回落到默认视觉。 */
@@ -443,6 +491,14 @@ export function getGlassOpticalRenderProfile(
     textureSource: routeKey.startsWith('/login') ? 'auto' : 'wallpaper',
     trailCount: highQuality ? 4 : 2,
   }
+}
+
+/** 按固定壳层职责返回稳定的静态镜片预算；标准业务表面保持既有光学参数。 */
+export function getGlassStaticSurfaceProfile(
+  quality: GlassOpticalQuality,
+  surfaceKind: GlassOpticalSurfaceKind,
+): GlassStaticSurfaceProfile {
+  return { ...(GLASS_STATIC_SURFACE_PROFILE_MATRIX[quality][surfaceKind] ?? GLASS_STATIC_SURFACE_PROFILE_MATRIX[quality].default) }
 }
 
 /** 将时间常数转换为与刷新率无关的指数衰减。 */
