@@ -162,10 +162,10 @@ const GLASS_STATIC_SURFACE_PROFILE_MATRIX: Record<
       edgeRefractionPixels: 0,
     },
     navbar: {
-      centerRefractionPixels: 1.05,
-      chromaticDispersionPixels: 0.12,
-      edgeHighlightStrength: 0.42,
-      edgeRefractionPixels: 6.4,
+      centerRefractionPixels: 1.6,
+      chromaticDispersionPixels: 0.28,
+      edgeHighlightStrength: 0.5,
+      edgeRefractionPixels: 8,
     },
   },
   high: {
@@ -176,10 +176,10 @@ const GLASS_STATIC_SURFACE_PROFILE_MATRIX: Record<
       edgeRefractionPixels: 0,
     },
     navbar: {
-      centerRefractionPixels: 1.45,
-      chromaticDispersionPixels: 0.72,
-      edgeHighlightStrength: 0.64,
-      edgeRefractionPixels: 12,
+      centerRefractionPixels: 4.8,
+      chromaticDispersionPixels: 1.5,
+      edgeHighlightStrength: 0.9,
+      edgeRefractionPixels: 24,
     },
   },
 }

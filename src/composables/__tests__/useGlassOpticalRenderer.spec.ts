@@ -428,11 +428,12 @@ describe('glass optical surface discovery', () => {
     document.body.append(layout)
     const render = vi.spyOn(three.WebGLRenderer.prototype, 'render')
     const quality = ref<'balanced' | 'high'>('balanced')
+    const appearance = ref<'clear' | 'frosted' | 'tinted'>('frosted')
     const scope = effectScope()
     const renderer = scope.run(() =>
       useGlassOpticalRenderer({
         active: ref(true),
-        appearance: ref('clear'),
+        appearance,
         canvas: ref(document.createElement('canvas')),
         quality,
         routeKey: ref('/dashboard'),
@@ -447,16 +448,39 @@ describe('glass optical surface discovery', () => {
       children: Array<{
         material: {
           uniforms: {
+            uAppearance: { value: number }
+            uSurfaceAppearance: { value: number[] }
             uSurfaceOpticalProfile: { value: Array<{ x: number; y: number; z: number; w: number }> }
           }
         }
       }>
     }
-    const profiles = scene.children[0].material.uniforms.uSurfaceOpticalProfile.value
-    expect(profiles[0]).toMatchObject({ x: 6.4, y: 1.05, z: 0.12, w: 0.42 })
+    const uniforms = scene.children[0].material.uniforms
+    const profiles = uniforms.uSurfaceOpticalProfile.value
+    expect(uniforms.uAppearance.value).toBe(2)
+    expect(uniforms.uSurfaceAppearance.value[0]).toBe(2)
+    expect(profiles[0]).toMatchObject({ x: 8, y: 1.6, z: 0.28, w: 0.5 })
 
     quality.value = 'high'
-    await vi.waitFor(() => expect(profiles[0]).toMatchObject({ x: 12, y: 1.45, z: 0.72, w: 0.64 }))
+    await vi.waitFor(() => expect(profiles[0]).toMatchObject({ x: 24, y: 4.8, z: 1.5, w: 0.9 }))
+
+    appearance.value = 'tinted'
+    await vi.waitFor(() => {
+      expect(uniforms.uAppearance.value).toBe(1)
+      expect(uniforms.uSurfaceAppearance.value[0]).toBe(1)
+    })
+
+    appearance.value = 'clear'
+    await vi.waitFor(() => {
+      expect(uniforms.uAppearance.value).toBe(0)
+      expect(uniforms.uSurfaceAppearance.value[0]).toBe(0)
+    })
+
+    appearance.value = 'frosted'
+    await vi.waitFor(() => {
+      expect(uniforms.uAppearance.value).toBe(2)
+      expect(uniforms.uSurfaceAppearance.value[0]).toBe(2)
+    })
     scope.stop()
   })
 
@@ -1364,10 +1388,10 @@ describe('glass optical surface discovery', () => {
     expect(uniforms.uTextureMix.value).toBeGreaterThanOrEqual(0)
     expect(uniforms.uTextureMix.value).toBeLessThan(1)
     expect(scene.children[0].material.fragmentShader).toContain(
-      'toneMapWallpaper(previous, viewportUv, uPreviousWallpaperExposure)',
+      'toneMapWallpaper(previous, viewportUv, uPreviousWallpaperExposure, appearance)',
     )
     expect(scene.children[0].material.fragmentShader).toContain(
-      'toneMapWallpaper(current, viewportUv, uWallpaperExposure)',
+      'toneMapWallpaper(current, viewportUv, uWallpaperExposure, appearance)',
     )
     expect(scene.children[0].material.fragmentShader).toContain('return mix(previousTone, currentTone, uTextureMix)')
     expect(scene.children[0].material.fragmentShader).not.toContain(
@@ -4660,7 +4684,10 @@ describe('glass optical surface discovery', () => {
       'rippleGradient * mix(230.0, 335.0, uQuality) * uRippleDeformationStrength',
     )
     expect(scene.children[0].material.fragmentShader).toContain(
-      'uAppearance > 1.5 ? 1.25 : (uAppearance > 0.5 ? 0.86 : 0.72)',
+      'surfaceAppearance > 1.5 ? 1.25 : (surfaceAppearance > 0.5 ? 0.86 : 0.72)',
+    )
+    expect(scene.children[0].material.fragmentShader).toContain(
+      'materialAlpha = max(materialAlpha, staticSurfacePresence * mix(0.26, 0.58, uQuality))',
     )
     expect(scene.children[0].material.fragmentShader).toContain('float sharedWaveDensity = mix(2.81, 1.63')
     expect(scene.children[0].material.fragmentShader).toContain(
@@ -4698,10 +4725,10 @@ describe('glass optical surface discovery', () => {
     expect(scene.children[0].material.fragmentShader).toContain('uniform float uWallpaperExposure')
     expect(scene.children[0].material.fragmentShader).toContain('compressWallpaperLuminance')
     expect(scene.children[0].material.fragmentShader).toContain(
-      'toneMapWallpaper(previous, viewportUv, uPreviousWallpaperExposure)',
+      'toneMapWallpaper(previous, viewportUv, uPreviousWallpaperExposure, appearance)',
     )
     expect(scene.children[0].material.fragmentShader).toContain(
-      'toneMapWallpaper(current, viewportUv, uWallpaperExposure)',
+      'toneMapWallpaper(current, viewportUv, uWallpaperExposure, appearance)',
     )
     expect(scene.children[0].material.fragmentShader).toContain('float transmissionResponse')
     expect(scene.children[0].material.fragmentShader).toContain('float referenceLiftProgress')

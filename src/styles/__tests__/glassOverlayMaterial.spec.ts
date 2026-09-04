@@ -252,7 +252,18 @@ describe('glass overlay material styles', () => {
     )
     expect(styles).not.toContain('blur(3px) saturate(115%)')
     expect(styles).toContain('linear-gradient(rgba(7, 14, 25, 4%), rgba(7, 14, 25, 10%))')
+    expect(styles).toContain('--glass-navbar-prism-opacity: 0.24')
+    expect(styles).toMatch(
+      /\.layout-navbar\s*\{[\s\S]*?&::after\s*\{[\s\S]*?block-size:\s*1px;[\s\S]*?opacity:\s*var\(--glass-navbar-prism-opacity\);/,
+    )
+    expect(styles).toMatch(
+      /&:is\(\[data-glass-appearance='clear'\], \[data-glass-appearance='tinted'\]\)\s*\{[\s\S]*?\.navbar-blur\.layout-navbar \.navbar-content-container::before\s*\{[\s\S]*?backdrop-filter:\s*none\s*!important;[\s\S]*?content:\s*none\s*!important;/,
+    )
+    expect(styles.match(/\.navbar-blur\.layout-navbar \.navbar-content-container::before/g)).toHaveLength(1)
     expect(styles).not.toContain('--glass-navbar-floating-surface')
+    expect(styles).toMatch(
+      /\.glass-optical-layer--fixed\s*\{[\s\S]*?z-index:\s*variables\.\$layout-vertical-nav-layout-navbar-z-index\s*-\s*1;/,
+    )
   })
 
   it('limits detached navbar geometry to eligible Transparent and Glass horizontal shells', () => {

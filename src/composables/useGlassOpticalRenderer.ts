@@ -315,6 +315,7 @@ interface GlassRendererUniforms extends Record<string, IUniform> {
   uRectCount: IUniform<number>
   uRects: IUniform<Vector4[]>
   uSurfaceOpticalProfile: IUniform<Vector4[]>
+  uSurfaceAppearance: IUniform<number[]>
   uSurfaceWeights: IUniform<number[]>
   uSurfaceDynamics: IUniform<number[]>
   uPreviousTexture: IUniform<Texture | null>
@@ -576,6 +577,7 @@ uniform sampler2D uRippleTexture;
 uniform vec4 uRects[8];
 uniform vec4 uRadii[8];
 uniform vec4 uSurfaceOpticalProfile[8];
+uniform float uSurfaceAppearance[8];
 uniform float uSurfaceWeights[8];
 uniform float uSurfaceDynamics[8];
 uniform int uRectCount;
@@ -652,9 +654,9 @@ vec3 compressWallpaperLuminance(vec3 color, float wallpaperExposure) {
   return clamp(exposed * (compressedLuminance / sourceLuminance), 0.0, 1.0);
 }
 
-vec3 toneMapWallpaper(vec3 color, vec2 uv, float wallpaperExposure) {
-  float tinted = step(0.5, uAppearance) * (1.0 - step(1.5, uAppearance));
-  float frosted = step(1.5, uAppearance);
+vec3 toneMapWallpaper(vec3 color, vec2 uv, float wallpaperExposure, float appearance) {
+  float tinted = step(0.5, appearance) * (1.0 - step(1.5, appearance));
+  float frosted = step(1.5, appearance);
   float exposure = mix(0.86, 0.85, tinted);
   exposure = mix(exposure, 0.82, frosted);
   float saturation = mix(0.82, 0.95, tinted);
@@ -709,12 +711,12 @@ vec3 toneMapWallpaper(vec3 color, vec2 uv, float wallpaperExposure) {
   return mix(absorbed, transmissionReference, transmissionMix);
 }
 
-vec3 sampleWallpaper(vec2 uv) {
+vec3 sampleWallpaper(vec2 uv, float appearance) {
   vec2 viewportUv = vec2(0.5) + (uv - vec2(0.5)) / max(uCoverScale, vec2(0.0001));
   vec2 previousUv = vec2(0.5) + (viewportUv - vec2(0.5)) * uPreviousCoverScale;
   vec3 previous;
   vec3 current;
-  if (uAppearance > 1.5 && uHasFrostedTexture > 0.5) {
+  if (appearance > 1.5 && uHasFrostedTexture > 0.5) {
     float frostLod = (1.0 - uFrostDetailLevel) * 6.0;
     // 低分辨率预滤已经扩大了每个 texel 的原图 footprint，LOD 只追加当前纹理内的低通层级。
     float frostGradientScale = exp2(frostLod);
@@ -736,76 +738,76 @@ vec3 sampleWallpaper(vec2 uv) {
   }
 
   if (uTextureMix <= 0.001) {
-    return toneMapWallpaper(previous, viewportUv, uPreviousWallpaperExposure);
+    return toneMapWallpaper(previous, viewportUv, uPreviousWallpaperExposure, appearance);
   }
   if (uTextureMix >= 0.999) {
-    return toneMapWallpaper(current, viewportUv, uWallpaperExposure);
+    return toneMapWallpaper(current, viewportUv, uWallpaperExposure, appearance);
   }
 
-  vec3 previousTone = toneMapWallpaper(previous, viewportUv, uPreviousWallpaperExposure);
-  vec3 currentTone = toneMapWallpaper(current, viewportUv, uWallpaperExposure);
+  vec3 previousTone = toneMapWallpaper(previous, viewportUv, uPreviousWallpaperExposure, appearance);
+  vec3 currentTone = toneMapWallpaper(current, viewportUv, uWallpaperExposure, appearance);
 
   return mix(previousTone, currentTone, uTextureMix);
 }
 
-vec3 sampleChromatic(vec2 uv, float separation) {
+vec3 sampleChromatic(vec2 uv, float separation, float appearance) {
   return vec3(
-    sampleWallpaper(uv + vec2(separation, 0.0)).r,
-    sampleWallpaper(uv).g,
-    sampleWallpaper(uv - vec2(separation, 0.0)).b
+    sampleWallpaper(uv + vec2(separation, 0.0), appearance).r,
+    sampleWallpaper(uv, appearance).g,
+    sampleWallpaper(uv - vec2(separation, 0.0), appearance).b
   );
 }
 
-vec3 sampleChromaticAlong(vec2 uv, vec2 axis, float separation) {
+vec3 sampleChromaticAlong(vec2 uv, vec2 axis, float separation, float appearance) {
   vec2 offset = normalize(axis) * separation;
 
   return vec3(
-    sampleWallpaper(uv + offset).r,
-    sampleWallpaper(uv).g,
-    sampleWallpaper(uv - offset).b
+    sampleWallpaper(uv + offset, appearance).r,
+    sampleWallpaper(uv, appearance).g,
+    sampleWallpaper(uv - offset, appearance).b
   );
 }
 
-vec3 sampleBalancedDiffuse(vec2 uv, vec2 axis, float radius) {
+vec3 sampleBalancedDiffuse(vec2 uv, vec2 axis, float radius, float appearance) {
   vec2 firstOffset = axis * radius;
   vec2 secondOffset = vec2(-axis.y, axis.x) * radius;
 
   return (
-    sampleWallpaper(uv) * 0.28 +
-    sampleWallpaper(uv + firstOffset) * 0.18 +
-    sampleWallpaper(uv - firstOffset) * 0.18 +
-    sampleWallpaper(uv + secondOffset) * 0.18 +
-    sampleWallpaper(uv - secondOffset) * 0.18
+    sampleWallpaper(uv, appearance) * 0.28 +
+    sampleWallpaper(uv + firstOffset, appearance) * 0.18 +
+    sampleWallpaper(uv - firstOffset, appearance) * 0.18 +
+    sampleWallpaper(uv + secondOffset, appearance) * 0.18 +
+    sampleWallpaper(uv - secondOffset, appearance) * 0.18
   );
 }
 
-vec3 sampleHighQualityDiffuse(vec2 uv, vec2 axis, float radius) {
+vec3 sampleHighQualityDiffuse(vec2 uv, vec2 axis, float radius, float appearance) {
   vec2 firstOffset = axis * radius;
   vec2 secondOffset = vec2(-axis.y, axis.x) * radius;
   vec2 firstDiagonal = normalize(firstOffset + secondOffset) * radius * 1.15;
   vec2 secondDiagonal = normalize(firstOffset - secondOffset) * radius * 1.15;
 
   return (
-    sampleWallpaper(uv) * 0.2 +
-    sampleWallpaper(uv + firstOffset) * 0.12 +
-    sampleWallpaper(uv - firstOffset) * 0.12 +
-    sampleWallpaper(uv + secondOffset) * 0.12 +
-    sampleWallpaper(uv - secondOffset) * 0.12 +
-    sampleWallpaper(uv + firstDiagonal) * 0.08 +
-    sampleWallpaper(uv - firstDiagonal) * 0.08 +
-    sampleWallpaper(uv + secondDiagonal) * 0.08 +
-    sampleWallpaper(uv - secondDiagonal) * 0.08
+    sampleWallpaper(uv, appearance) * 0.2 +
+    sampleWallpaper(uv + firstOffset, appearance) * 0.12 +
+    sampleWallpaper(uv - firstOffset, appearance) * 0.12 +
+    sampleWallpaper(uv + secondOffset, appearance) * 0.12 +
+    sampleWallpaper(uv - secondOffset, appearance) * 0.12 +
+    sampleWallpaper(uv + firstDiagonal, appearance) * 0.08 +
+    sampleWallpaper(uv - firstDiagonal, appearance) * 0.08 +
+    sampleWallpaper(uv + secondDiagonal, appearance) * 0.08 +
+    sampleWallpaper(uv - secondDiagonal, appearance) * 0.08
   );
 }
 
-float getContentProtection(vec2 sourceUv) {
-  if (uQuality < 0.5 || uHasWallpaperTexture < 0.5 || uAppearance > 1.5) return 1.0;
+float getContentProtection(vec2 sourceUv, float appearance) {
+  if (uQuality < 0.5 || uHasWallpaperTexture < 0.5 || appearance > 1.5) return 1.0;
 
   vec2 sourceTexel = max(uCoverScale, vec2(0.0001)) / max(uVisibleViewportSize, vec2(1.0));
-  vec3 horizontalStart = sampleWallpaper(sourceUv - vec2(sourceTexel.x * 2.5, 0.0));
-  vec3 horizontalEnd = sampleWallpaper(sourceUv + vec2(sourceTexel.x * 2.5, 0.0));
-  vec3 verticalStart = sampleWallpaper(sourceUv - vec2(0.0, sourceTexel.y * 2.5));
-  vec3 verticalEnd = sampleWallpaper(sourceUv + vec2(0.0, sourceTexel.y * 2.5));
+  vec3 horizontalStart = sampleWallpaper(sourceUv - vec2(sourceTexel.x * 2.5, 0.0), appearance);
+  vec3 horizontalEnd = sampleWallpaper(sourceUv + vec2(sourceTexel.x * 2.5, 0.0), appearance);
+  vec3 verticalStart = sampleWallpaper(sourceUv - vec2(0.0, sourceTexel.y * 2.5), appearance);
+  vec3 verticalEnd = sampleWallpaper(sourceUv + vec2(0.0, sourceTexel.y * 2.5), appearance);
   float contentGradient = max(length(horizontalEnd - horizontalStart), length(verticalEnd - verticalStart));
 
   return mix(1.0, 0.44, smoothstep(0.07, 0.34, contentGradient));
@@ -840,11 +842,16 @@ void main() {
   float sharedMotionPresence = 0.0;
   float dynamicMask = 0.0;
   float staticOpticalEnergy = 0.0;
+  float staticSurfacePresence = 0.0;
+  float staticHighlightEnergy = 0.0;
+  float staticAbsorptionEnergy = 0.0;
   float staticRefractionLimit = 0.0;
   float staticChromaticDispersion = 0.0;
   vec2 staticChromaticDirection = vec2(1.0, 0.0);
   vec2 staticRefraction = vec2(0.0);
   vec2 dynamicRefraction = vec2(0.0);
+  float effectiveAppearance = uAppearance;
+  float effectiveAppearanceWeight = 0.0;
 ${GLASS_FLUID_FRAGMENT_SETUP}
   float interactionMask = uInteractionRectCount > 0 ? 0.0 : 1.0;
   for (int interactionIndex = 0; interactionIndex < 8; interactionIndex++) {
@@ -881,19 +888,23 @@ ${GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD}
   vec2 rippleRefraction =
     rippleGradient * mix(230.0, 335.0, uQuality) * uRippleDeformationStrength;
   rippleRefraction /= max(uPresentationSize, vec2(1.0));
-  float frosted = step(1.5, uAppearance);
-  float rippleAppearanceScale = uAppearance > 1.5 ? 1.25 : (uAppearance > 0.5 ? 0.86 : 0.72);
-  rippleRefraction *= rippleAppearanceScale;
-
   for (int i = 0; i < 8; i++) {
     if (i >= uRectCount) break;
 
     vec4 rect = uRects[i];
     float surfaceDynamic = uSurfaceDynamics[i];
     vec4 staticProfile = uSurfaceOpticalProfile[i];
+    float surfaceAppearance = uSurfaceAppearance[i];
     vec2 local = (vUv - rect.xy) / rect.zw;
     float rectMask = roundedRectMask(local, rect.zw * uPresentationSize, uRadii[i]) * uSurfaceWeights[i];
     if (rectMask <= 0.0) continue;
+    if (rectMask > effectiveAppearanceWeight) {
+      effectiveAppearance = surfaceAppearance;
+      effectiveAppearanceWeight = rectMask;
+    }
+    float frosted = step(1.5, surfaceAppearance);
+    float surfaceRippleAppearanceScale =
+      surfaceAppearance > 1.5 ? 1.25 : (surfaceAppearance > 0.5 ? 0.86 : 0.72);
 
     float sideDistance = min(local.x, 1.0 - local.x);
     float nonBottomDistance = min(sideDistance, 1.0 - local.y);
@@ -908,8 +919,13 @@ ${GLASS_FLUID_FRAGMENT_TRAIL_AND_FIELD}
     float rightEdge = 1.0 - smoothstep(0.0, 0.14, 1.0 - local.x);
     float bottomEdge = 1.0 - smoothstep(0.0, 0.14, local.y);
     float leftEdge = 1.0 - smoothstep(0.0, 0.14, local.x);
-    float staticEdgeResponse = max(max(leftEdge, rightEdge), max(topEdge, bottomEdge));
-    vec2 staticEdgeNormal = vec2(rightEdge - leftEdge, topEdge - bottomEdge);
+    float staticEdgeWidth = mix(0.14, 0.24, uQuality);
+    float staticTopEdge = 1.0 - smoothstep(0.0, staticEdgeWidth, 1.0 - local.y);
+    float staticRightEdge = 1.0 - smoothstep(0.0, staticEdgeWidth, 1.0 - local.x);
+    float staticBottomEdge = 1.0 - smoothstep(0.0, staticEdgeWidth, local.y);
+    float staticLeftEdge = 1.0 - smoothstep(0.0, staticEdgeWidth, local.x);
+    float staticEdgeResponse = max(max(staticLeftEdge, staticRightEdge), max(staticTopEdge, staticBottomEdge));
+    vec2 staticEdgeNormal = vec2(staticRightEdge - staticLeftEdge, staticTopEdge - staticBottomEdge);
     float staticEdgeNormalLength = length(staticEdgeNormal);
     if (staticEdgeNormalLength > 0.0001) {
       staticEdgeNormal /= staticEdgeNormalLength;
@@ -929,13 +945,19 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_OPTICS}
       lens * staticProfile.y * 2.0 * rectMask / max(uPresentationSize, vec2(1.0));
     staticRefractionLimit = max(staticRefractionLimit, staticProfile.x * staticProfileMask);
     staticOpticalEnergy = max(staticOpticalEnergy, staticProfile.w * staticProfileMask);
+    staticSurfacePresence = max(staticSurfacePresence, step(0.001, staticProfile.x) * rectMask);
+    float staticLitRim = max(staticTopEdge * mix(1.0, 0.62, local.x), staticLeftEdge * 0.52);
+    float staticBacklitRim = max(staticRightEdge * 0.68, staticBottomEdge * mix(0.52, 0.82, local.x));
+    staticHighlightEnergy = max(staticHighlightEnergy, staticLitRim * staticProfile.w * rectMask);
+    staticAbsorptionEnergy = max(staticAbsorptionEnergy, staticBacklitRim * staticProfile.w * rectMask);
     float profileDispersion = staticProfile.z * staticProfileMask;
     if (profileDispersion > staticChromaticDispersion) {
       staticChromaticDispersion = profileDispersion;
       staticChromaticDirection = staticEdgeNormal;
     }
 ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
-    dynamicRefraction += rippleRefraction * rippleMode * rectMask * surfaceDynamic * interactionMask;
+    dynamicRefraction +=
+      rippleRefraction * surfaceRippleAppearanceScale * rippleMode * rectMask * surfaceDynamic * interactionMask;
     edge = max(edge, edgeResponse * rectMask * surfaceDynamic);
     caustic = max(caustic, localCaustic);
     caustic = max(
@@ -960,7 +982,8 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
 
   if (mask <= 0.0) discard;
 
-  float contentProtection = getContentProtection(coverUv(vUv + staticRefraction));
+  float frosted = step(1.5, effectiveAppearance);
+  float contentProtection = getContentProtection(coverUv(vUv + staticRefraction), effectiveAppearance);
   dynamicRefraction *= contentProtection;
   // 高光足迹与壁纸位移强度独立校准，收紧反馈范围不能同步削弱三项动态参数。
   dynamicRefraction *= 1.2;
@@ -976,12 +999,12 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
   float usesPrefilteredFrost = frosted * uHasFrostedTexture;
   float hasStaticChromaticDispersion = step(0.001, staticChromaticDispersion);
   vec3 refracted = usesPrefilteredFrost > 0.5 && hasStaticChromaticDispersion < 0.5
-    ? sampleWallpaper(sourceUv)
-    : sampleChromaticAlong(sourceUv, staticChromaticDirection, chromaticSeparation);
+    ? sampleWallpaper(sourceUv, effectiveAppearance)
+    : sampleChromaticAlong(sourceUv, staticChromaticDirection, chromaticSeparation, effectiveAppearance);
   float detailSeparation = chromaticSeparation * mix(1.45, 2.35, uQuality);
   vec3 detailed = usesPrefilteredFrost > 0.5 && hasStaticChromaticDispersion < 0.5
     ? refracted
-    : sampleChromaticAlong(sourceUv, staticChromaticDirection, detailSeparation);
+    : sampleChromaticAlong(sourceUv, staticChromaticDirection, detailSeparation, effectiveAppearance);
   refracted = mix(refracted, detailed, mix(0.06, 0.16, uQuality) * (1.0 - frosted));
   vec2 diffusionAxis = length(refraction) > 0.00001 ? normalize(refraction) : wakePerpendicular;
   float diffusionRadius =
@@ -997,13 +1020,13 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
   if (usesPrefilteredFrost > 0.5) {
     diffused = refracted;
   } else if (uQuality > 0.5) {
-    diffused = sampleHighQualityDiffuse(sourceUv, diffusionAxis, diffusionRadius);
+    diffused = sampleHighQualityDiffuse(sourceUv, diffusionAxis, diffusionRadius, effectiveAppearance);
   } else {
-    diffused = sampleBalancedDiffuse(sourceUv, diffusionAxis, diffusionRadius);
+    diffused = sampleBalancedDiffuse(sourceUv, diffusionAxis, diffusionRadius, effectiveAppearance);
   }
   refracted = mix(refracted, diffused, frosted);
   float refractedLuminance = dot(refracted, vec3(0.2126, 0.7152, 0.0722));
-  float tinted = step(0.5, uAppearance) * (1.0 - step(1.5, uAppearance));
+  float tinted = step(0.5, effectiveAppearance) * (1.0 - step(1.5, effectiveAppearance));
   float transmissionOffset = min(uTransmissionStrength - 1.0, 0.0);
   if (transmissionOffset < 0.0) {
     float dimming = mix(0.14, 0.18, uQuality) * mix(1.0, 0.65, frosted);
@@ -1029,7 +1052,7 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
   float proceduralEdgeAlpha = 0.14;
   float proceduralCausticAlpha = 0.075;
 
-  if (uAppearance > 1.5) {
+  if (effectiveAppearance > 1.5) {
     highlight = vec3(0.94, 0.97, 1.0);
     edgeHighlightMix = 0.15;
     causticHighlightMix = 0.042;
@@ -1037,7 +1060,7 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
     materialAlpha = frostedBaseAlpha * mix(0.9, 1.0, liquidPresence);
     proceduralEdgeAlpha = 0.16;
     proceduralCausticAlpha = 0.045;
-  } else if (uAppearance > 0.5) {
+  } else if (effectiveAppearance > 0.5) {
     highlight = mix(vec3(1.0), uTintColor, mix(0.28, 0.72, uTintDensity));
     edgeHighlightMix = 0.17;
     causticHighlightMix = 0.085;
@@ -1045,6 +1068,9 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
     float tintedBaseAlpha = mix(0.16, 0.5, tintedVisibilityProgress);
     materialAlpha = tintedBaseAlpha * mix(1.0, 1.8, liquidPresence);
   }
+
+  // 导航表面用折射后的壁纸覆盖滚动内容；提高覆盖率不会引入新的采样或深色遮罩。
+  materialAlpha = max(materialAlpha, staticSurfacePresence * mix(0.26, 0.58, uQuality));
 
   if (uHasWallpaperTexture < 0.5) {
     float proceduralReflection =
@@ -1072,12 +1098,20 @@ ${GLASS_FLUID_FRAGMENT_SURFACE_REFRACTION}
       0.36
     );
   reflectionMix = clamp(
-    reflectionMix + staticOpticalEnergy * 0.1 * uReflectionStrength * highlightBudget,
+    reflectionMix +
+      staticHighlightEnergy * mix(0.13, 0.24, uQuality) * uReflectionStrength * highlightBudget,
     0.0,
     0.42
   );
   float absorption =
-    clamp(backlightAbsorption * mix(0.035, 0.075, frosted) * uReflectionStrength, 0.0, 0.14);
+    clamp(
+      (
+        backlightAbsorption * mix(0.035, 0.075, frosted) +
+        staticAbsorptionEnergy * mix(0.045, 0.085, uQuality)
+      ) * uReflectionStrength,
+      0.0,
+      0.18
+    );
   refracted *= 1.0 - absorption;
   refracted = mix(refracted, highlight, reflectionMix);
   refracted += highlight * caustic * causticHighlightMix * uReflectionStrength * highlightBudget;
@@ -1286,6 +1320,19 @@ function getGlassAppearanceUniformValue(appearance: ThemeCustomizerGlassAppearan
   if (appearance === 'frosted') return 2
 
   return 0
+}
+
+/** 透明与色调共用无磨砂采样分支，但色调仍保留主题色语义；磨砂保持原有材质分支。 */
+function getGlassSurfaceAppearanceUniformValue(
+  appearance: ThemeCustomizerGlassAppearance,
+  kind: GlassOpticalSurfaceKind,
+) {
+  if (kind !== 'navbar') return getGlassAppearanceUniformValue(appearance)
+
+  if (appearance === 'tinted') return getGlassAppearanceUniformValue('tinted')
+  if (appearance === 'frosted') return getGlassAppearanceUniformValue('frosted')
+
+  return getGlassAppearanceUniformValue('clear')
 }
 
 /** 浮动顶栏需要更明显的背景弯曲；连接在顶边时收窄静态镜片预算，避免首屏形成厚重色块。 */
@@ -1963,6 +2010,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
     const uniformRects = resources.uniforms.uRects.value
     const uniformRadii = resources.uniforms.uRadii.value
     const uniformOpticalProfiles = resources.uniforms.uSurfaceOpticalProfile.value
+    const uniformSurfaceAppearances = resources.uniforms.uSurfaceAppearance.value
     const uniformWeights = resources.uniforms.uSurfaceWeights.value
     const uniformDynamics = resources.uniforms.uSurfaceDynamics.value
     const ownersWithVisibleInteractionClips = new Set(interactionClips.map(clip => clip.owner))
@@ -1992,6 +2040,10 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
         opticalProfile.centerRefractionPixels * profileScale,
         opticalProfile.chromaticDispersionPixels * profileScale,
         opticalProfile.edgeHighlightStrength * profileScale,
+      )
+      uniformSurfaceAppearances[index] = getGlassSurfaceAppearanceUniformValue(
+        toValue(options.appearance),
+        slot?.kind ?? 'default',
       )
       const surfaceWeight =
         slot?.role === 'outgoing'
@@ -4016,6 +4068,7 @@ export function useGlassOpticalRenderer(options: UseGlassOpticalRendererOptions)
         uRectCount: { value: 0 },
         uRects: { value: Array.from({ length: 8 }, () => new Vector4Class()) },
         uSurfaceOpticalProfile: { value: Array.from({ length: 8 }, () => new Vector4Class()) },
+        uSurfaceAppearance: { value: Array.from({ length: 8 }, () => 0) },
         uSurfaceWeights: { value: Array.from({ length: 8 }, () => 0) },
         uSurfaceDynamics: { value: Array.from({ length: 8 }, () => 1) },
         uPreviousTexture: { value: null },

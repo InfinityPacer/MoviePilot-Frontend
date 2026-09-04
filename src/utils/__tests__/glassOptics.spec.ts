@@ -44,6 +44,8 @@ describe('glass optics geometry', () => {
     expect(highNavbar.edgeRefractionPixels).toBeGreaterThan(balancedNavbar.edgeRefractionPixels)
     expect(highNavbar.centerRefractionPixels).toBeGreaterThan(balancedNavbar.centerRefractionPixels)
     expect(highNavbar.chromaticDispersionPixels).toBeGreaterThan(balancedNavbar.chromaticDispersionPixels)
+    expect(highNavbar.edgeHighlightStrength).toBeGreaterThan(balancedNavbar.edgeHighlightStrength)
+    expect(highNavbar.edgeRefractionPixels - balancedNavbar.edgeRefractionPixels).toBeGreaterThanOrEqual(10)
     expect(getGlassStaticSurfaceProfile('high', 'default')).toEqual({
       centerRefractionPixels: 0,
       chromaticDispersionPixels: 0,
